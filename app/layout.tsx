@@ -7,7 +7,7 @@ import { ThemeProvider } from "@/providers/theme-provider";
 
 
 export const metadata: Metadata = {
-  title: "InstaBiz - Multi-Vendor E-commerce Platform",
+  title: "Zuria - Multi-Vendor E-commerce Platform",
   description: "Create your online store in minutes",
 };
 
