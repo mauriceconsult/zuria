@@ -25,7 +25,7 @@ export async function POST(req: Request) {
   if (event.type === "checkout.session.completed") {
     const session = event.data.object as Stripe.Checkout.Session;
     const orderId = session?.metadata?.orderId ?? "";
-    await onPaymentConfirmed(orderId, session); // ← pass session for address/phone
+    await onPaymentConfirmed(orderId);
     return NextResponse.json(null, { status: 200 });
   }
 

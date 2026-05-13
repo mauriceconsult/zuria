@@ -1,62 +1,78 @@
 // app/api/[shopId]/delivery/quote/route.ts
-import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
-import { getDeliveryQuote } from "@/lib/delivery-provider";
-import { geocodeAddress } from "@/lib/geo-code";
+// Returns a delivery quote for a given customer address.
+// Called by the cart Summary component on address input (debounced).
 
-export const dynamic = "force-dynamic";
+import { prisma } from "@/lib/prisma";
+import { getDeliveryProvider } from "@/lib/delivery/registry";
+import { NextResponse } from "next/server";
+import type { NextRequest } from "next/server";
+import { geocodeAddress } from "@/lib/delivery/geo-code";
 
 export async function POST(
-  req: Request,
-  { params }: { params: Promise<{ shopId: string }> },
+  req: NextRequest,
+  { params }: { params: Promise<{ shopId: string }> }
 ) {
-  const { shopId } = await params;
-  const { deliveryAddress, deliveryMethod } = await req.json();
-
-  if (!deliveryAddress) {
-    return new NextResponse("Delivery address is required", { status: 400 });
-  }
-
-  // Pickup is free — no need to call any provider
-  if (deliveryMethod === "pickup") {
-    return NextResponse.json({
-      cost: 0,
-      estimatedMinutes: 0,
-      currency: "UGX",
-      quoteId: null,
-      provider: "pickup",
-    });
-  }
-
-  const shop = await prisma.shop.findUnique({
-    where: { id: shopId },
-  });
-
-  if (!shop?.latitude || !shop?.longitude || !shop?.address) {
-    return new NextResponse(
-      "Shop location not configured. Please update settings.",
-      { status: 400 },
-    );
-  }
-
   try {
-    const geo = await geocodeAddress(deliveryAddress);
+    const { shopId }   = await params;
+    const body         = await req.json();
+    const { address, coords } = body as {
+      address:  string;
+      coords?:  { lat: number; lng: number }; // GPS override from browser
+    };
 
-    const quote = await getDeliveryQuote({
-      pickupAddress: shop.address,
-      pickupLat: shop.latitude,
-      pickupLng: shop.longitude,
-      dropoffAddress: deliveryAddress,
-      dropoffLat: geo.lat,
-      dropoffLng: geo.lng,
+    if (!address) {
+      return NextResponse.json(
+        { error: "Delivery address is required" },
+        { status: 400 }
+      );
+    }
+
+    // ── Get shop location ──────────────────────────────────────────────────
+    const shop = await prisma.shop.findUnique({
+      where: { id: shopId },
+      select: { latitude: true, longitude: true, currency: true, name: true, phone: true },
     });
 
-    return NextResponse.json(quote);
-  } catch (error) {
-    console.error("[DELIVERY_QUOTE]", error);
-    return new NextResponse(
-      error instanceof Error ? error.message : "Could not fetch delivery quote",
-      { status: 500 },
-    );
+    if (!shop?.latitude || !shop?.longitude) {
+      return NextResponse.json(
+        { error: "Shop location not configured. Please contact the shop." },
+        { status: 422 }
+      );
+    }
+
+    // ── Geocode customer address (or use GPS coords directly) ──────────────
+    const destination = coords
+      ? { formatted: address, coords }
+      : { formatted: address, coords: await geocodeAddress(address) };
+
+    // ── Get quote from configured provider ─────────────────────────────────
+    const provider = getDeliveryProvider();
+    const quote    = await provider.getQuote({
+      shopId,
+      origin:      { lat: shop.latitude, lng: shop.longitude },
+      destination,
+    });
+
+    // ── Convert cost to shop currency if needed ────────────────────────────
+    // If provider returns UGX and shop uses UGX, no conversion needed.
+    // Add FX conversion here when supporting multi-currency shops.
+    const cost = quote.currency === shop.currency
+      ? quote.cost
+      : quote.cost; // placeholder — add FX rate lookup here
+
+    return NextResponse.json({
+      quoteId:          quote.quoteId,
+      provider:         quote.provider,
+      cost,
+      currency:         shop.currency ?? quote.currency,
+      estimatedMinutes: quote.estimatedMinutes,
+      expiresAt:        quote.expiresAt,
+      destination:      destination.coords, // return resolved coords for UI
+    });
+
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Failed to get delivery quote";
+    console.error("[delivery/quote]", err);
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

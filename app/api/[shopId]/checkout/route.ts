@@ -1,3 +1,5 @@
+// app/api/[shopId]/checkout/route.ts (Stripe)
+
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
 import { stripe } from "@/lib/stripe";
@@ -22,7 +24,6 @@ export async function POST(
 ) {
   const { shopId } = await params;
 
-  // Guard: Stripe available
   if (!stripe) {
     return new NextResponse(
       "Card payments are not available yet. Please use Mobile Money.",
@@ -35,7 +36,10 @@ export async function POST(
     deliveryMethod,
     deliveryCost,
     deliveryAddress,
-    deliveryQuoteId, // ← added
+    deliveryQuoteId,
+    deliveryProvider,   // ← new
+    deliveryLat,        // ← new
+    deliveryLng,        // ← new
     phone,
   } = await req.json();
 
@@ -43,57 +47,41 @@ export async function POST(
     return new NextResponse("Product Ids are required.", { status: 400 });
   }
 
-  // Fetch shop for currency
-  const shop = await prisma.shop.findUnique({
-    where: { id: shopId },
-  });
+  const shop = await prisma.shop.findUnique({ where: { id: shopId } });
+  if (!shop) return new NextResponse("Shop not found.", { status: 404 });
 
-  if (!shop) {
-    return new NextResponse("Shop not found.", { status: 404 });
-  }
-
-  const currency = (shop.currency ?? "USD").toLowerCase();
+  const currency         = (shop.currency ?? "USD").toLowerCase();
   const safeDeliveryCost = Number(deliveryCost ?? 0);
 
   const products = await prisma.product.findMany({
     where: { id: { in: productIds } },
   });
-
   if (products.length === 0) {
     return new NextResponse("No valid products found.", { status: 404 });
   }
 
   const subtotal = products.reduce(
-    (sum, product) => sum + product.price.toNumber(),
-    0,
+    (sum, p) => sum + p.price.toNumber(), 0
   );
-
   const { platformFee } = calculateFees(subtotal, safeDeliveryCost);
 
   const line_items: Stripe.Checkout.SessionCreateParams.LineItem[] = [
-    // Products
-    ...products.map((product) => ({
+    ...products.map((p) => ({
       quantity: 1,
       price_data: {
         currency,
-        product_data: { name: product.name },
-        unit_amount: Math.round(product.price.toNumber() * 100),
+        product_data: { name: p.name },
+        unit_amount: Math.round(p.price.toNumber() * 100),
       },
     })),
-    // Delivery
-    ...(safeDeliveryCost > 0
-      ? [
-          {
-            quantity: 1,
-            price_data: {
-              currency,
-              product_data: { name: `Delivery - ${deliveryMethod}` },
-              unit_amount: Math.round(safeDeliveryCost * 100),
-            },
-          },
-        ]
-      : []),
-    // Platform Fee
+    ...(safeDeliveryCost > 0 ? [{
+      quantity: 1,
+      price_data: {
+        currency,
+        product_data: { name: `Delivery — ${deliveryMethod}` },
+        unit_amount: Math.round(safeDeliveryCost * 100),
+      },
+    }] : []),
     {
       quantity: 1,
       price_data: {
@@ -108,11 +96,14 @@ export async function POST(
     data: {
       shopId,
       phone,
-      address: deliveryAddress,
-      paymentMethod: "stripe",
+      address:          deliveryAddress,
+      paymentMethod:    "stripe",
       deliveryMethod,
-      deliveryCost: safeDeliveryCost,
-      deliveryQuoteId, // ← added
+      deliveryCost:     safeDeliveryCost,
+      deliveryQuoteId,
+      deliveryProvider, // ← new
+      deliveryLat,      // ← new
+      deliveryLng,      // ← new
       platformFee,
       orderItems: {
         create: productIds.map((productId: string) => ({ productId })),
@@ -126,7 +117,7 @@ export async function POST(
     billing_address_collection: "required",
     phone_number_collection: { enabled: true },
     success_url: `${process.env.FRONTEND_STORE_URL}/cart?success=1`,
-    cancel_url: `${process.env.FRONTEND_STORE_URL}/cart?cancel=1`,
+    cancel_url:  `${process.env.FRONTEND_STORE_URL}/cart?cancel=1`,
     metadata: { orderId: order.id },
   });
 

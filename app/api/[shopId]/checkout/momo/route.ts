@@ -1,3 +1,5 @@
+// app/api/[shopId]/checkout/momo/route.ts
+
 import { momo } from "@/lib/momo";
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
@@ -14,28 +16,29 @@ export async function POST(
     productIds,
     phone,
     address,
-    deliveryMethod, 
+    deliveryMethod,
     deliveryCost,
-    // deliveryQuoteId, 
+    deliveryQuoteId,
+    deliveryProvider,   // ← new
+    deliveryLat,        // ← new
+    deliveryLng,        // ← new
   } = await req.json();
 
-  // Fetch shop for currency
-  const shop = await prisma.shop.findUnique({
-    where: { id: shopId },
-  });
-
+  const shop     = await prisma.shop.findUnique({ where: { id: shopId } });
   const currency = shop?.currency ?? "UGX";
 
-  // Create order
   const order = await prisma.order.create({
     data: {
       shopId,
       phone,
       address,
-      paymentMethod: "mobile_money",
+      paymentMethod:    "mobile_money",
       deliveryMethod,
       deliveryCost,
-      // deliveryQuoteId,
+      deliveryQuoteId,
+      deliveryProvider, // ← new
+      deliveryLat,      // ← new
+      deliveryLng,      // ← new
       orderItems: {
         create: productIds.map((productId: string) => ({ productId })),
       },
@@ -43,31 +46,23 @@ export async function POST(
     include: { orderItems: { include: { product: true } } },
   });
 
-  // Calculate fees — single subtotal calculation
   const subtotal = order.orderItems.reduce(
-    (sum, item) => sum + item.product.price.toNumber(),
-    0,
+    (sum, item) => sum + item.product.price.toNumber(), 0
   );
+  const { platformFee, grandTotal } = calculateFees(subtotal, deliveryCost ?? 0);
 
-  const { platformFee, grandTotal } = calculateFees(
-    subtotal,
-    deliveryCost ?? 0,
-  );
-
-  // Initiate MoMo collection
   const referenceId = await momo.collections.requestToPay({
-    amount: String(Math.round(grandTotal)),
-    currency, // ← dynamic currency
+    amount:     String(Math.round(grandTotal)),
+    currency,
     externalId: order.id,
-    payer: { partyIdType: "MSISDN", partyId: phone },
-    payerMessage: `Payment for order - includes ${PLATFORM_FEE_PERCENT}% platform fee`,
-    payeeNote: "Thank you for your purchase",
+    payer:      { partyIdType: "MSISDN", partyId: phone },
+    payerMessage: `Payment for order — includes ${PLATFORM_FEE_PERCENT}% platform fee`,
+    payeeNote:    "Thank you for your purchase",
   });
 
-  // Store referenceId and platformFee
   await prisma.order.update({
     where: { id: order.id },
-    data: { platformFee, paymentRef: referenceId },
+    data:  { platformFee, paymentRef: referenceId },
   });
 
   return NextResponse.json({ referenceId, orderId: order.id });

@@ -139,6 +139,8 @@ model Order {
 
   deliveredAt     DateTime?
   refundRequest   RefundRequest?
+  deliveryLat         Float?
+  deliveryLng         Float?
 
   // Payment
   paymentMethod String  @default("stripe") // "stripe" | "mobile_money"
