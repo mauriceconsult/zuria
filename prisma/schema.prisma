@@ -130,6 +130,7 @@ model Order {
   shopId     String
   shop       Shop        @relation("ShopToOrder", fields: [shopId], references: [id])
   orderItems OrderItem[]
+  jobs       DeliveryJob[]
   isPaid     Boolean     @default(false)
   phone      String      @default("")
   address    String      @default("")
@@ -194,3 +195,46 @@ model OrderItem {
   @@index([orderId])
   @@index([productId])
 }
+// ─────────────────────────────────────────────────────────────────────────────
+// PRISMA SCHEMA ADDITIONS
+// Add these models to your existing schema.prisma
+// ─────────────────────────────────────────────────────────────────────────────
+
+
+
+model Rider {
+  id        String   @id @default(uuid())
+  clerkId   String   @unique
+  name      String
+  phone     String
+  email     String
+  isActive  Boolean  @default(true)
+  rating    Float    @default(5.0)
+  totalJobs Int      @default(0)
+  jobs      DeliveryJob[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model DeliveryJob {
+  id           String    @id @default(uuid())
+  orderId      String    @unique
+  order        Order     @relation(fields: [orderId], references: [id])
+  riderId      String?
+  rider        Rider?    @relation(fields: [riderId], references: [id])
+  status       String    @default("pending")
+  deliveryCost Float     @default(0)
+  lastLat      Float?    // rider's last known position
+  lastLng      Float?
+  acceptedAt   DateTime?
+  deliveredAt  DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@index([status])
+  @@index([riderId])
+}
+
+// Also add to Order model:
+// deliveryJob  DeliveryJob?
+
