@@ -200,20 +200,20 @@ model OrderItem {
 // Add these models to your existing schema.prisma
 // ─────────────────────────────────────────────────────────────────────────────
 
-
-
 model Rider {
-  id        String   @id @default(uuid())
-  clerkId   String   @unique
-  name      String
-  phone     String
-  email     String
-  isActive  Boolean  @default(true)
-  rating    Float    @default(5.0)
-  totalJobs Int      @default(0)
-  jobs      DeliveryJob[]
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id           String   @id @default(uuid())
+  clerkId      String   @unique
+  name         String
+  phone        String
+  email        String
+  vehicleType  String   @default("motorcycle") // motorcycle | bicycle | car
+  isApproved   Boolean  @default(false)        // shop owner approves
+  isActive     Boolean  @default(false)        // rider toggles availability
+  rating       Float    @default(5.0)
+  totalJobs    Int      @default(0)
+  jobs         DeliveryJob[]
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 }
 
 model DeliveryJob {
@@ -235,6 +235,5 @@ model DeliveryJob {
   @@index([riderId])
 }
 
-// Also add to Order model:
-// deliveryJob  DeliveryJob?
+
 
