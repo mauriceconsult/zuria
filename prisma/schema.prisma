@@ -200,21 +200,42 @@ model OrderItem {
 // Add these models to your existing schema.prisma
 // ─────────────────────────────────────────────────────────────────────────────
 
+// prisma/schema.prisma — additions to Rider model
+// Run: npx prisma migrate dev --name add_rider_approval_source
+
+// ── Updated Rider model ───────────────────────────────────────────────────────
+
 model Rider {
-  id           String   @id @default(uuid())
-  clerkId      String   @unique
+  id           String        @id @default(uuid())
+  clerkId      String        @unique
   name         String
   phone        String
   email        String
-  vehicleType  String   @default("motorcycle") // motorcycle | bicycle | car
-  isApproved   Boolean  @default(false)        // shop owner approves
-  isActive     Boolean  @default(false)        // rider toggles availability
-  rating       Float    @default(5.0)
-  totalJobs    Int      @default(0)
+  vehicleType  String        @default("motorcycle") // motorcycle | bicycle | car
+
+  // Approval
+  isApproved   Boolean       @default(false)
+  approvedBy   String?       // "shop" | "platform"
+  approvedById String?       // shopId (if shop) or adminClerkId (if platform)
+  approvedAt   DateTime?
+
+  // Availability
+  isActive     Boolean       @default(false)
+
+  // Stats
+  rating       Float         @default(5.0)
+  totalJobs    Int           @default(0)
+
   jobs         DeliveryJob[]
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  @@index([isApproved])
+  @@index([approvedBy])
 }
+
+// ── DeliveryJob model (unchanged — shown for reference) ──────────────────────
 
 model DeliveryJob {
   id           String    @id @default(uuid())
@@ -224,7 +245,7 @@ model DeliveryJob {
   rider        Rider?    @relation(fields: [riderId], references: [id])
   status       String    @default("pending")
   deliveryCost Float     @default(0)
-  lastLat      Float?    // rider's last known position
+  lastLat      Float?
   lastLng      Float?
   acceptedAt   DateTime?
   deliveredAt  DateTime?
@@ -234,6 +255,7 @@ model DeliveryJob {
   @@index([status])
   @@index([riderId])
 }
+
 
 
 
