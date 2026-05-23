@@ -7,8 +7,16 @@ import { ThemeProvider } from "@/providers/theme-provider";
 
 
 export const metadata: Metadata = {
-  title: "Zuria - Multi-Vendor E-commerce Platform",
-  description: "Create your online store in minutes",
+  title: {
+    default: "Vendly Dashboard",
+    template: "%s | Vendly Dashboard",
+  },
+  description: "Manage your Vendly shop — products, orders, analytics.",
+  icons: {
+    icon:     "/favicon.svg",
+    shortcut: "/favicon.svg",
+    apple:    "/favicon.svg",
+  },
 };
 
 export default function RootLayout({

@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none">
+  <!-- Bag body -->
+  <rect x="2" y="11" width="28" height="19" rx="5" fill="#0286ff"/>
+  <!-- Handle -->
+  <path d="M10 11 Q10 3 16 3 Q22 3 22 11" stroke="#0286ff" stroke-width="3.5" stroke-linecap="round"/>
+  <!-- Checkmark / V -->
+  <path d="M7 19 L16 28 L25 19" stroke="white" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

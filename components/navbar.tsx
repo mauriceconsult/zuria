@@ -5,6 +5,7 @@ import { auth } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { ThemeToggle } from "./ui/theme-toggle";
+import { VendlyLogo } from "./ui/vendly-logo";
 
 const Navbar = async () => {
   const { userId } = await auth();
@@ -21,8 +22,9 @@ const Navbar = async () => {
       <div className="flex h-16 items-center px-4">
         <ShopSwitcher items={shops} />
         <MainNav className="mx-6" />
-        <div className="ml-auto flex items-center space-x-4">
-          <ThemeToggle/>
+        <div className="ml-auto flex items-center space-x-6">
+          <ThemeToggle />
+          <VendlyLogo size={36} />
           <UserButton afterSwitchSessionUrl="/" />
         </div>
       </div>
