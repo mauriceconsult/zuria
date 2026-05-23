@@ -1,6 +1,3 @@
-// vercel.json  (Zuria root)
-// Routes dukaboda.maxnovate.com to /dukaboda paths
-
 {
   "rewrites": [
     {
