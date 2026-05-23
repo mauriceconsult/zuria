@@ -1,0 +1,22 @@
+// vercel.json  (Zuria root)
+// Routes dukaboda.maxnovate.com to /dukaboda paths
+
+{
+  "rewrites": [
+    {
+      "source": "/",
+      "has": [{ "type": "host", "value": "dukaboda.maxnovate.com" }],
+      "destination": "/dukaboda"
+    },
+    {
+      "source": "/admin",
+      "has": [{ "type": "host", "value": "dukaboda.maxnovate.com" }],
+      "destination": "/dukaboda/admin"
+    },
+    {
+      "source": "/track/:jobId",
+      "has": [{ "type": "host", "value": "dukaboda.maxnovate.com" }],
+      "destination": "/dukaboda/track/:jobId"
+    }
+  ]
+}
