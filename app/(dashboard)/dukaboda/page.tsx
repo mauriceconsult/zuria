@@ -3,7 +3,8 @@
 // Recruits riders — explains the opportunity, vehicle types, earnings
 
 import Link from "next/link";
-import { Bike, Car, CheckCircle2 } from "lucide-react";
+import { ArrowRight, CheckCircle2 } from "lucide-react";
+import { DukabodaLogo } from "@/components/ui/dukaboda-logo";
 
 const APK_URL = process.env.NEXT_PUBLIC_DUKABODA_APK_URL ?? "#";
 
@@ -29,34 +30,34 @@ const EARNINGS = [
 export default function DukabodaLandingPage() {
   return (
     <main className="min-h-screen bg-white font-sans">
-
       {/* ── Nav ─────────────────────────────────────────────────────────── */}
-      <nav className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-        <div className="flex items-center gap-2">
-          <span className="text-2xl">🛵</span>
-          <span className="text-xl font-bold text-gray-900">Dukaboda</span>
-          <span className="text-xs text-gray-400 font-mono ml-1">by Maxnovate</span>
-        </div>
+      <nav className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
+        <DukabodaLogo variant="primary" size={36} />
+
         <Link
           href="/dukaboda/admin"
-          className="text-xs text-gray-400 hover:text-gray-600 transition-colors"
+          className="flex items-center gap-1 text-sm font-medium text-gray-600 hover:text-black transition-colors"
         >
-          Admin →
+          Admin
+          <ArrowRight className="h-4 w-4" />
         </Link>
       </nav>
 
       {/* ── Hero ────────────────────────────────────────────────────────── */}
-      <section className="px-6 py-20 text-center bg-gradient-to-b from-blue-50 to-white">
+      <section className="px-6 py-20 text-center bg-linear-to-b from-blue-50 to-white">
         <div className="max-w-2xl mx-auto">
-          <span className="text-6xl mb-6 block">🛵</span>
+          <div className="flex justify-center mb-6">
+            <DukabodaLogo variant="primary" size={80} />
+          </div>
           <h1 className="text-4xl sm:text-5xl font-black text-gray-900 mb-4 leading-tight">
-            Deliver with Dukaboda.<br />
+            Deliver with Dukaboda.
+            <br />
             <span className="text-[#0286ff]">Earn every shilling.</span>
           </h1>
           <p className="text-lg text-gray-500 mb-8 leading-relaxed">
-            Join Kampala's fastest-growing delivery network. Pick up orders
-            from Vendly shops and earn the full delivery fee — paid directly
-            to your MoMo number after every drop-off.
+            Join Kampala&apos;s fastest-growing delivery network. Pick up orders
+            from Vendly shops and earn the full delivery fee — paid directly to
+            your MoMo number after every drop-off.
           </p>
           <a
             href={APK_URL}
@@ -64,7 +65,9 @@ export default function DukabodaLandingPage() {
           >
             📱 Download the App
           </a>
-          <p className="text-xs text-gray-400 mt-3">Android · Free · No Play Store needed</p>
+          <p className="text-xs text-gray-400 mt-3">
+            Android · Free · No Play Store needed
+          </p>
         </div>
       </section>
 
@@ -75,14 +78,28 @@ export default function DukabodaLandingPage() {
         </h2>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
           {[
-            { icon: "💰", title: "Keep 100%",        body: "Shop-linked riders keep every shilling of the delivery fee. No commission cut." },
-            { icon: "📱", title: "MoMo instant pay", body: "Your earnings hit your MTN or Airtel number the moment the delivery is confirmed." },
-            { icon: "🕐", title: "Work your hours",  body: "Go online when you want, offline when you don't. No shifts, no minimums." },
+            {
+              icon: "💰",
+              title: "Keep 100%",
+              body: "Shop-linked riders keep every shilling of the delivery fee. No commission cut.",
+            },
+            {
+              icon: "📱",
+              title: "MoMo instant pay",
+              body: "Your earnings hit your MTN or Airtel number the moment the delivery is confirmed.",
+            },
+            {
+              icon: "🕐",
+              title: "Work your hours",
+              body: "Go online when you want, offline when you don't. No shifts, no minimums.",
+            },
           ].map((item) => (
             <div key={item.title} className="bg-gray-50 rounded-2xl p-6">
               <span className="text-3xl mb-3 block">{item.icon}</span>
               <h3 className="font-bold text-gray-900 mb-1">{item.title}</h3>
-              <p className="text-sm text-gray-500 leading-relaxed">{item.body}</p>
+              <p className="text-sm text-gray-500 leading-relaxed">
+                {item.body}
+              </p>
             </div>
           ))}
         </div>
@@ -124,16 +141,24 @@ export default function DukabodaLandingPage() {
           <table className="w-full text-sm">
             <thead className="bg-gray-50">
               <tr>
-                <th className="px-6 py-3 text-left font-semibold text-gray-600">Distance</th>
-                <th className="px-6 py-3 text-left font-semibold text-gray-600">You earn</th>
-                <th className="px-6 py-3 text-left font-semibold text-gray-600">Route type</th>
+                <th className="px-6 py-3 text-left font-semibold text-gray-600">
+                  Distance
+                </th>
+                <th className="px-6 py-3 text-left font-semibold text-gray-600">
+                  You earn
+                </th>
+                <th className="px-6 py-3 text-left font-semibold text-gray-600">
+                  Route type
+                </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100 bg-white">
               {EARNINGS.map((row) => (
                 <tr key={row.distance}>
                   <td className="px-6 py-4 text-gray-700">{row.distance}</td>
-                  <td className="px-6 py-4 font-bold text-[#0286ff]">{row.fee}</td>
+                  <td className="px-6 py-4 font-bold text-[#0286ff]">
+                    {row.fee}
+                  </td>
                   <td className="px-6 py-4 text-gray-400">{row.note}</td>
                 </tr>
               ))}
@@ -153,13 +178,18 @@ export default function DukabodaLandingPage() {
           </h2>
           <div className="space-y-4">
             {STEPS.map((s) => (
-              <div key={s.step} className="flex items-start gap-4 bg-white rounded-2xl p-5 border border-gray-100">
-                <span className="flex-shrink-0 w-8 h-8 rounded-full bg-[#0286ff] text-white text-sm font-bold flex items-center justify-center">
+              <div
+                key={s.step}
+                className="flex items-start gap-4 bg-white rounded-2xl p-5 border border-gray-100"
+              >
+                <span className="shrink-0 w-8 h-8 rounded-full bg-[#0286ff] text-white text-sm font-bold flex items-center justify-center">
                   {s.step}
                 </span>
                 <div>
                   <p className="font-semibold text-gray-900">{s.title}</p>
-                  <p className="text-sm text-gray-400 mt-0.5">{s.description}</p>
+                  <p className="text-sm text-gray-400 mt-0.5">
+                    {s.description}
+                  </p>
                 </div>
               </div>
             ))}
@@ -181,8 +211,11 @@ export default function DukabodaLandingPage() {
             "Reliable mobile data connection",
             "Willingness to deliver professionally",
           ].map((req) => (
-            <div key={req} className="flex items-center gap-3 bg-gray-50 rounded-xl px-4 py-3">
-              <CheckCircle2 className="h-4 w-4 text-green-500 flex-shrink-0" />
+            <div
+              key={req}
+              className="flex items-center gap-3 bg-gray-50 rounded-xl px-4 py-3"
+            >
+              <CheckCircle2 className="h-4 w-4 text-green-500 shrink-0" />
               <span className="text-sm text-gray-700">{req}</span>
             </div>
           ))}
@@ -192,13 +225,15 @@ export default function DukabodaLandingPage() {
       {/* ── CTA ─────────────────────────────────────────────────────────── */}
       <section className="px-6 py-20 bg-[#0286ff] text-center">
         <div className="max-w-xl mx-auto">
-          <span className="text-5xl mb-4 block">🚀</span>
+          <div className="flex justify-center mb-4">
+            <DukabodaLogo variant="white" size={64} />
+          </div>
           <h2 className="text-3xl font-black text-white mb-3">
             Ready to start earning?
           </h2>
           <p className="text-blue-100 mb-8 text-sm">
-            Download the app, create your profile, and start receiving
-            delivery jobs from Vendly shops near you.
+            Download the app, create your profile, and start receiving delivery
+            jobs from Vendly shops near you.
           </p>
           <a
             href={APK_URL}
@@ -213,13 +248,15 @@ export default function DukabodaLandingPage() {
       <footer className="px-6 py-8 border-t border-gray-100 text-center">
         <p className="text-xs text-gray-400">
           © {new Date().getFullYear()} Dukaboda · Part of the{" "}
-          <a href="https://maxnovate.com" className="underline hover:text-gray-600">
+          <a
+            href="https://maxnovate.com"
+            className="underline hover:text-gray-600"
+          >
             Maxnovate
           </a>{" "}
           platform · Kampala, Uganda
         </p>
       </footer>
-
     </main>
   );
 }
