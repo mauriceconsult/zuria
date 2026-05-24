@@ -68,6 +68,81 @@ export default function DukabodaLandingPage() {
           <p className="text-xs text-gray-400 mt-3">
             Android · Free · No Play Store needed
           </p>
+          <p className="text-xs text-gray-500 flex items-center gap-1">
+        <span className="text-green-500">🔒</span>
+        Built by{" "}
+        <a href="https://maxnovate.com" className="underline hover:text-gray-700">
+          Maxnovate
+        </a>
+        {" "}· Kampala, Uganda · Safe to install
+      </p>
+    </div>
+      </section>
+
+{/* ── Installation guide — addresses Google's warning ─────────────── */}
+<section className="px-6 py-12 bg-amber-50 border-y border-amber-100">
+  <div className="max-w-2xl mx-auto">
+    <div className="flex items-start gap-3 mb-6">
+      <span className="text-2xl mt-0.5">⚠️</span>
+      <div>
+        <h2 className="text-base font-bold text-amber-900 mb-1">
+          Google will warn you — here&apos;s what to do
+        </h2>
+        <p className="text-sm text-amber-700 leading-relaxed">
+          Because Dukaboda is not on the Play Store yet, Android shows a
+          security warning when you install it. This is normal for trusted
+          apps distributed directly. Follow these steps:
+        </p>
+      </div>
+    </div>
+
+    <div className="space-y-3">
+      {[
+        {
+          step: "1",
+          title: 'Tap "Download anyway"',
+          body: 'When Google warns "This file may be harmful", tap Download anyway. The file is safe — Google flags all APKs not on the Play Store.',
+        },
+        {
+          step: "2",
+          title: 'Allow "Install unknown apps"',
+          body: "Android will ask permission to install apps from your browser. Tap Settings → enable Allow from this source → go back and tap Install.",
+        },
+        {
+          step: "3",
+          title: 'Tap "Install" on the next screen',
+          body: 'Android shows one final "Do you want to install this app?" screen. Tap Install. The app is now on your phone.',
+        },
+        {
+          step: "4",
+          title: "Open Dukaboda and sign up",
+          body: "Tap Open or find Dukaboda in your app drawer. Create your account, pick your vehicle type, and wait for approval.",
+        },
+      ].map((s) => (
+        <div
+          key={s.step}
+          className="flex items-start gap-4 bg-white rounded-2xl p-4 border border-amber-100"
+        >
+          <span className="shrink-0 w-7 h-7 rounded-full bg-amber-400 text-white text-xs font-bold flex items-center justify-center">
+            {s.step}
+          </span>
+          <div>
+            <p className="text-sm font-semibold text-gray-900">{s.title}</p>
+            <p className="text-xs text-gray-500 mt-0.5 leading-relaxed">
+              {s.body}
+            </p>
+          </div>
+        </div>
+      ))}
+    </div>
+
+    <p className="text-xs text-amber-600 text-center mt-5">
+      Still unsure?{" "}
+      <a href="https://maxnovate.com/contact" className="underline font-medium">
+        Contact Maxnovate support
+      </a>{" "}
+      — we&apos;re happy to help.
+    </p>
         </div>
       </section>
 
