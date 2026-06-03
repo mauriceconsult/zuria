@@ -1,76 +1,95 @@
-import { Document, Packer, Paragraph, TextRun } from "docx";
-
-type Course = {
-  id?: string;
-  title?: string;
-  // add other course fields as needed
-};
-
-type Order = {
-  id?: string;
-  total?: number;
-  // add other order fields as needed
-};
-
-type Delivery = {
-  id?: string;
-  status?: string;
-  // add other delivery fields as needed
-};
+import { Document, Packer, Paragraph, TextRun, HeadingLevel } from "docx";
 
 interface StrategyContext {
-  courses: Course[];
-  orders: Order[];
-  deliveries: Delivery[];
+  courses: { title?: string }[];
+  orders: { total?: number }[];
+  deliveries: { status?: string }[];
   insights: string;
+  meta?: {
+    hasData: boolean;
+    dataScore: number;
+    connectedApps: string[];
+  };
 }
 
 export async function generateStrategyDoc(context: StrategyContext) {
+  const { courses, orders, deliveries, insights, meta } = context;
+
   const doc = new Document({
     sections: [
       {
         children: [
+          // ── TITLE ──
+          new Paragraph({
+            text: "Studio AI Strategy Report",
+            heading: HeadingLevel.TITLE,
+          }),
+
+          // ── SUMMARY ──
+          new Paragraph({
+            text: "Executive Summary",
+            heading: HeadingLevel.HEADING_1,
+          }),
+
           new Paragraph({
             children: [
-              new TextRun({
-                text: "Studio AI Strategy Report",
-                bold: true,
-                size: 32,
-              }),
+              new TextRun(
+                meta?.hasData
+                  ? `You are active across ${
+                      meta.connectedApps.join(", ") || "platform modules"
+                    } with a data score of ${meta.dataScore}.`
+                  : "You are at an early stage. No platform activity detected yet.",
+              ),
             ],
           }),
 
+          // ── ACTIVITY ──
           new Paragraph({
-            children: [new TextRun({ text: "Courses", bold: true })],
+            text: "Activity Overview",
+            heading: HeadingLevel.HEADING_1,
           }),
 
-          ...context.courses.slice(0, 5).map(
-            (c) =>
+          new Paragraph({
+            children: [new TextRun(`Courses: ${courses.length}`)],
+          }),
+          new Paragraph({
+            children: [new TextRun(`Orders: ${orders.length}`)],
+          }),
+          new Paragraph({
+            children: [new TextRun(`Deliveries: ${deliveries.length}`)],
+          }),
+
+          // ── COURSE SAMPLE ──
+          ...(courses.length > 0
+            ? [
+                new Paragraph({
+                  text: "Top Courses",
+                  heading: HeadingLevel.HEADING_2,
+                }),
+
+                ...courses.slice(0, 5).map(
+                  (c) =>
+                    new Paragraph({
+                      children: [
+                        new TextRun(`• ${c.title || "Untitled course"}`),
+                      ],
+                    }),
+                ),
+              ]
+            : []),
+
+          // ── INSIGHTS ──
+          new Paragraph({
+            text: "AI Insights",
+            heading: HeadingLevel.HEADING_1,
+          }),
+
+          ...insights.split("\n").map(
+            (line) =>
               new Paragraph({
-                children: [new TextRun(`• ${c.title || "Untitled course"}`)],
+                children: [new TextRun(line)],
               }),
-              ),
-          
-
-          new Paragraph({
-            children: [new TextRun(`Courses: ${context.courses.length}`)],
-          }),
-
-          new Paragraph({
-            children: [new TextRun(`Orders: ${context.orders.length}`)],
-          }),
-
-          new Paragraph({
-            children: [new TextRun(`Deliveries: ${context.deliveries.length}`)],
-          }),
-
-          new Paragraph({
-            children: [new TextRun({ text: "Insights:", bold: true })],
-          }),
-
-          new Paragraph({
-            children: [new TextRun(context.insights || "")],
-          }),
+          ),
         ],
       },
     ],
