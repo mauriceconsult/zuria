@@ -15,16 +15,12 @@ export async function POST() {
 
   const context = await buildUserContext(userId, token);
 
-  const hasData =
-    context.courses.length ||
-    context.orders.length ||
-    context.deliveries.length;
-
-  const insights = hasData
+  const insights = context.meta.hasData
     ? await generateInsights(context)
     : await generateGenericInsights();
 
   const buffer = await generateDoc({ context, insights });
+
   const arrayBuffer = buffer.buffer.slice(
     buffer.byteOffset,
     buffer.byteOffset + buffer.byteLength,

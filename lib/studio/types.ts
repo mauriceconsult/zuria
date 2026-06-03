@@ -12,6 +12,8 @@ export type Admin = {
   userId?: string;
   imageUrl?: string;
   createdAt?: string;
+  courses?: Course[];
+  noticeboards?: Noticeboard[];
 };
 
 export type Course = {
@@ -202,6 +204,7 @@ export type PlatformContext = {
   instaskul: {
     admins: Admin[];
     courses: Course[];
+    courseworks: Coursework[];   
     tutorials: Tutorial[];
     noticeboards: Noticeboard[];
   };
@@ -231,3 +234,4 @@ export type PlatformContext = {
   };
   insights?: string;
 };
+

@@ -5,142 +5,110 @@ import {
   getOrders,
   getDeliveryJobs,
 } from "./connectors";
+
 import { generateInsights } from "./insights";
-import { Admin, Article, Billboard, Category, Color, Course, Delivery, Editor, Order, Product, Shop, Size, Tutorial, Writer } from "./types";
+import { PlatformContext, Admin, Shop } from "./types";
 
-type Context = {
-  instaskul: {
-    admins: Admin[];
-    courses: Course[];
-    tutorials: Tutorial[];
-  };
-
-  vendly: {
-    shops: Shop[];
-    products: Product[];
-    orders: Order[];
-    categories: Category[];
-    sizes: Size[];
-    colors: Color[];
-    billboards: Billboard[];
-  };
-
-  dukaboda: {
-    deliveries: Delivery[];
-  };
-
-  blog: {
-    writers: Writer[];
-    articles: Article[];
-    editors: Editor[];
-  };
-
-  meta: {
-    hasData: boolean;
-    dataScore: number;
-    connectedApps: string[];
-  };
-};
-
-type Identity = { id?: string };
-
-export async function buildUserContext(userId: string, token: string) {
+export async function buildUserContext(
+  userId: string,
+  token: string,
+): Promise<PlatformContext> {
   try {
-    // 1. Resolve identities in parallel
-    const [admins, shops] = await Promise.all([
-      getAdmins(userId, token).catch(() => [] as Identity[]),
-      getShops(userId, token).catch(() => [] as Identity[]),
+    // ── 1. Resolve identities ─────────────────────────
+    const [admins, shops, ] = await Promise.all([
+      getAdmins(userId, token).catch(() => [] as Admin[]),
+      getShops(userId, token).catch(() => [] as Shop[]),
     ]);
 
     const adminId = admins?.[0]?.id;
     const shopId = shops?.[0]?.id;
 
-    // 2. Fetch platform data in parallel (safe fallbacks)
+    // ── 2. Fetch core data ────────────────────────────
     const [courses, orders, deliveries] = await Promise.all([
       adminId ? getCourses(adminId, token).catch(() => []) : [],
       shopId ? getOrders(shopId, token).catch(() => []) : [],
       getDeliveryJobs(token).catch(() => []),
     ]);
 
-    const context: Context = {
+    // ── 3. Compute meta BEFORE building context ───────
+    const hasData =
+      courses.length > 0 || orders.length > 0 || deliveries.length > 0;
+
+    const connectedApps: string[] = [];
+    if (admins.length) connectedApps.push("instaskul");
+    if (shops.length) connectedApps.push("vendly");
+    if (deliveries.length) connectedApps.push("dukaboda");
+
+    const dataScore = courses.length + orders.length + deliveries.length;
+
+    // ── 4. Build FULL PlatformContext (strict match) ──
+    const context: PlatformContext = {
       instaskul: {
-        admins: admins || [],
-        courses: courses || [],
+        admins,
+        courses,
         tutorials: [],
+        courseworks: [],
+        noticeboards: [],
       },
+
       vendly: {
-        shops: shops || [],
+        shops,
         products: [],
-        orders: orders || [],
+        orders,
         categories: [],
         sizes: [],
         colors: [],
         billboards: [],
+        refunds: [],
       },
+
       dukaboda: {
-        deliveries: deliveries || [],
+        deliveries,
+        riders: [],
       },
+
       blog: {
         writers: [],
         articles: [],
-        editors: [],
+        categories: [],
       },
+
       meta: {
-        hasData: false,
-        dataScore: 0,
-        connectedApps: [],
+        hasData,
+        dataScore,
+        connectedApps,
       },
     };
 
-    // 3. Reliable boolean check
-const hasData =
-  context.instaskul.courses.length > 0 ||
-  context.vendly.orders.length > 0 ||
-  context.vendly.products.length > 0 ||
-  context.dukaboda.deliveries.length > 0 ||
-      context.blog.articles.length > 0;
-    
-    const connectedApps: string[] = [];
+    // ── 5. Generate insights ─────────────────────────
+    try {
+      context.insights = hasData
+        ? await generateInsights(context)
+        : `No activity yet.
 
-    if (admins.length) connectedApps.push("instaskul");
-    if (shops.length) connectedApps.push("vendly");
-    if (deliveries.length) connectedApps.push("dukaboda");
-    if (context.blog.writers.length) connectedApps.push("blog");
+Start by:
+• Creating a course (Instaskul)
+• Listing a product (Vendly)
+• Completing a delivery (Dukaboda)
 
-    const dataScore = courses.length + orders.length + deliveries.length + context.blog.articles.length;
-    context.meta = {
-      hasData,
-      dataScore,
-      connectedApps,
-    };
-    // 4. Insights (safe)
-    let insights: string;
-
-    if (hasData) {
-      try {
-        insights = await generateInsights(context);
-      } catch {
-        insights =
-          "We found activity, but couldn’t generate insights right now.";
-      }
-    } else {
-      insights =
-        "No activity yet. Start by creating a course (Instaskul), listing a product (Vendly), or completing a delivery (Dukaboda).";
+Once activity starts, Studio AI will generate deeper insights.`;
+    } catch {
+      context.insights =
+        "We found activity, but couldn’t generate insights right now.";
     }
 
-    return {
-      ...context,
-      insights,
-      hasData, // 👈 expose this to UI (VERY useful)
-    };
+    return context;
   } catch {
-    // 5. Hard fallback (never break Studio)
+    // ── 6. HARD SAFE FALLBACK (same shape) ────────────
     return {
       instaskul: {
         admins: [],
         courses: [],
         tutorials: [],
+        courseworks: [],
+        noticeboards: [],
       },
+
       vendly: {
         shops: [],
         products: [],
@@ -149,20 +117,26 @@ const hasData =
         sizes: [],
         colors: [],
         billboards: [],
+        refunds: [],
       },
+
       dukaboda: {
         deliveries: [],
+        riders: [],
       },
+
       blog: {
         writers: [],
         articles: [],
-        editors: [],
+        categories: [],
       },
+
       meta: {
         hasData: false,
         dataScore: 0,
         connectedApps: [],
       },
+
       insights:
         "We couldn’t load your data right now. Please try again shortly.",
     };

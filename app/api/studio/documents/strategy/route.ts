@@ -1,6 +1,5 @@
 import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
-
 import { buildUserContext } from "@/lib/studio/context";
 import { generateStrategyDoc } from "@/lib/studio/documents";
 
@@ -16,7 +15,7 @@ export async function GET() {
   const context = await buildUserContext(userId, token!);
   const buffer = await generateStrategyDoc(context);
 
-  // ✅ CRITICAL FIX
+  
   const arrayBuffer = new Uint8Array(buffer).buffer;
 
   return new NextResponse(arrayBuffer, {
