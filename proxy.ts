@@ -26,20 +26,24 @@ const isPublicApiRoute = createRouteMatcher([
 // ─── Middleware ───────────────────────────────────────────────────────────────
 
 export default clerkMiddleware(async (auth, request) => {
-  // 1. Public routes — always pass through
-  if (isPublicRoute(request)) return NextResponse.next();
+  if (isPublicRoute(request)) {
+    return NextResponse.next();
+  }
 
-  // 2. Public API GET routes — storefront reads, no auth needed
   if (request.method === "GET" && isPublicApiRoute(request)) {
     return NextResponse.next();
   }
 
-  // 3. Everything else requires authentication — explicit redirect, no throw
   const { userId } = await auth();
 
   if (!userId) {
+    if (request.nextUrl.pathname.startsWith("/api/")) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     const signIn = new URL("/sign-in", request.url);
     signIn.searchParams.set("redirect_url", request.nextUrl.pathname);
+
     return NextResponse.redirect(signIn);
   }
 
