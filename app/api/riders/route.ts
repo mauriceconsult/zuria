@@ -1,63 +1,60 @@
-// ─────────────────────────────────────────────────────────────────────────────
-// app/api/riders/route.ts
-//
-// POST /api/riders   → self-register as a rider
-// ─────────────────────────────────────────────────────────────────────────────
-
+// app/api/riders/route.ts  (Zuria)
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@clerk/nextjs/server";
 import { prisma } from "@/lib/prisma";
 
 export async function POST(req: NextRequest) {
-  const authResult = await auth();
-   console.log("AUTH RESULT", authResult);
-  try {
-    const { userId } = authResult;
+  // Use platform API key for cross-app calls from Dukaboda
+  const apiKey = req.headers.get("x-api-key");
 
-    if (!userId) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+  // Also support Clerk auth for web dashboard calls
+  // let userId: string | null = null;
 
+  if (apiKey && apiKey === process.env.PLATFORM_API_KEY) {
+    // Trusted cross-app call — clerkId comes in the body
     const body = await req.json();
-    console.log("POST /api/riders", body);
+    const { clerkId, name, phone, email, vehicleType } = body;
 
-    const { name, phone, email, vehicleType } = body;
-
-    if (!name || !phone || !email || !vehicleType) {
+    if (!clerkId || !name || !phone || !email || !vehicleType) {
       return NextResponse.json(
-        { error: "name, phone, email and vehicle type are required" },
+        { error: "clerkId, name, phone, email and vehicleType are required" },
         { status: 400 },
       );
     }
 
-    const existing = await prisma.rider.findUnique({
-      where: { clerkId: userId },
-    });
-
-    if (existing) {
-      return NextResponse.json(existing);
-    }
+    const existing = await prisma.rider.findUnique({ where: { clerkId } });
+    if (existing) return NextResponse.json(existing);
 
     const rider = await prisma.rider.create({
-      data: {
-        clerkId: userId,
-        name,
-        phone,
-        email,
-        vehicleType,
-      },
+      data: { clerkId, name, phone, email, vehicleType },
     });
-
     return NextResponse.json(rider, { status: 201 });
-  } catch (error) {
-    console.error("RIDER REGISTRATION ERROR:", error);
+  }
 
+  // Fallback: Clerk auth for same-instance calls
+  const { auth } = await import("@clerk/nextjs/server");
+  const { userId: clerkUserId } = await auth();
+
+  if (!clerkUserId) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const body = await req.json();
+  const { name, phone, email, vehicleType } = body;
+
+  if (!name || !phone || !email || !vehicleType) {
     return NextResponse.json(
-      {
-        error: "Internal server error",
-        details: error instanceof Error ? error.message : String(error),
-      },
-      { status: 500 },
+      { error: "name, phone, email and vehicleType are required" },
+      { status: 400 },
     );
   }
+
+  const existing = await prisma.rider.findUnique({
+    where: { clerkId: clerkUserId },
+  });
+  if (existing) return NextResponse.json(existing);
+
+  const rider = await prisma.rider.create({
+    data: { clerkId: clerkUserId, name, phone, email, vehicleType },
+  });
+  return NextResponse.json(rider, { status: 201 });
 }
