@@ -8,6 +8,15 @@ export async function POST(req: NextRequest) {
 
   // Also support Clerk auth for web dashboard calls
   // let userId: string | null = null;
+    console.log("API KEY:", apiKey);
+  console.log("EXPECTED:", process.env.PLATFORM_API_KEY);
+    if (apiKey !== process.env.PLATFORM_API_KEY) {
+      return NextResponse.json(
+        { error: "Invalid platform API key" },
+        { status: 401 },
+      );
+  }
+  
 
   if (apiKey && apiKey === process.env.PLATFORM_API_KEY) {
     // Trusted cross-app call — clerkId comes in the body
