@@ -1,18 +1,18 @@
 import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 
-// ─── Public routes — no auth required ────────────────────────────────────────
-
 const isPublicRoute = createRouteMatcher([
   "/",
   "/sign-in(.*)",
   "/sign-up(.*)",
-  "/api/webhook(.*)",   // covers /api/webhook, /api/webhook/momo, etc.
+  "/api/webhook(.*)",
   "/api/shops",
+  "/api/riders(.*)", // Dukaboda cross-app rider registration
+  "/api/delivery/jobs(.*)", // Dukaboda job polling
+  "/api/admin/riders(.*)", // Platform admin rider approval
+  "/api/debug(.*)", // Temporary debug endpoint
+  "/dukaboda(.*)", // Public landing + tracking pages
 ]);
-
-// ─── Public API routes — GET only, no auth required ──────────────────────────
-// These are storefront-facing endpoints consumed by the customer-facing shop UI.
 
 const isPublicApiRoute = createRouteMatcher([
   "/api/:shopId/products(.*)",
@@ -22,8 +22,6 @@ const isPublicApiRoute = createRouteMatcher([
   "/api/:shopId/billboards(.*)",
   "/api/:shopId/checkout/momo/status",
 ]);
-
-// ─── Middleware ───────────────────────────────────────────────────────────────
 
 export default clerkMiddleware(async (auth, request) => {
   if (isPublicRoute(request)) {
@@ -43,7 +41,6 @@ export default clerkMiddleware(async (auth, request) => {
 
     const signIn = new URL("/sign-in", request.url);
     signIn.searchParams.set("redirect_url", request.nextUrl.pathname);
-
     return NextResponse.redirect(signIn);
   }
 

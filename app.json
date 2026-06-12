@@ -1,0 +1,12 @@
+{
+  "expo": {
+    "extra": {
+      "eas": {
+        "projectId": "b81d4e55-b1b3-468d-9160-b6054061f61f"
+      }
+    },
+    "android": {
+      "package": "com.mainna62.zuria"
+    }
+  }
+}
