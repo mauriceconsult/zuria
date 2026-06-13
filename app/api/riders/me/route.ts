@@ -7,13 +7,23 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { prisma } from "@/lib/prisma";
 
+export async function GET(req: NextRequest) {
+  const apiKey = req.headers.get("x-api-key");
 
-export async function GET() {
-  const { userId } = await auth();
-  if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (apiKey !== process.env.PLATFORM_API_KEY) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
 
-  const rider = await prisma.rider.findUnique({ where: { clerkId: userId } });
-  if (!rider) return NextResponse.json({ error: "Not registered" }, { status: 404 });
+  // clerkId passed as query param since GET has no body
+  const clerkId = req.nextUrl.searchParams.get("clerkId");
+  if (!clerkId) {
+    return NextResponse.json({ error: "clerkId required" }, { status: 400 });
+  }
+
+  const rider = await prisma.rider.findUnique({ where: { clerkId } });
+  if (!rider) {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
 
   return NextResponse.json(rider);
 }
