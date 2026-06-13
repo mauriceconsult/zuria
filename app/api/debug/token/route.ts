@@ -9,7 +9,9 @@ export async function POST(req: NextRequest) {
   return NextResponse.json({
     userId,
     hasAuthHeader: !!authHeader,
-    authHeaderPrefix: authHeader?.slice(0, 30),
-    zuriaClerKeyPrefix: process.env.CLERK_SECRET_KEY?.slice(0, 15),
+    authHeaderPrefix: authHeader?.substring(0, 25),
+    zuriaClerkKeyPrefix: process.env.CLERK_SECRET_KEY?.substring(0, 12),
+    clerkPublishableKeyPrefix:
+      process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY?.substring(0, 12),
   });
 }

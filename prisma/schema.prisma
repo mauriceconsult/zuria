@@ -207,7 +207,7 @@ model OrderItem {
 
 model Rider {
   id           String        @id @default(uuid())
-  clerkId      String        @unique
+  clerkId      String        @unique // used as external identifier for riders (e.g. in Uber Direct)
   name         String
   phone        String
   email        String
