@@ -1,17 +1,14 @@
-// app/api/debug/token/route.ts  (TEMPORARY — delete after debugging)
+// app/api/debug/token/route.ts — replace with this
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@clerk/nextjs/server";
 
 export async function POST(req: NextRequest) {
-  const authHeader = req.headers.get("authorization");
-  const { userId } = await auth();
-  
+  const apiKey = req.headers.get("x-api-key");
+  const body = await req.json().catch(() => ({}));
+
   return NextResponse.json({
-    userId,
-    hasAuthHeader: !!authHeader,
-    authHeaderPrefix: authHeader?.substring(0, 25),
-    zuriaClerkKeyPrefix: process.env.CLERK_SECRET_KEY?.substring(0, 12),
-    clerkPublishableKeyPrefix:
-      process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY?.substring(0, 12),
+    receivedApiKey: apiKey?.substring(0, 12) ?? "MISSING",
+    expectedApiKey: process.env.PLATFORM_API_KEY?.substring(0, 12) ?? "MISSING",
+    keysMatch: apiKey === process.env.PLATFORM_API_KEY,
+    body,
   });
 }
