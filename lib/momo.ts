@@ -2,18 +2,40 @@ import "dotenv/config";
 import axios from "axios";
 import { v4 as uuidv4 } from "uuid";
 
+interface RequestToPayPayload {
+  amount: string;
+  currency: string;
+  externalId: string;
+  payer: {
+    partyIdType: "MSISDN";
+    partyId: string;
+  };
+  payerMessage: string;
+  payeeNote: string;
+}
+interface TransferPayload {
+  amount: string;
+  currency: string;
+  externalId: string;
+  payee: {
+    partyIdType: "MSISDN";
+    partyId: string;
+  };
+  payerMessage: string;
+  payeeNote: string;
+}
 
 const momo = {
   // === COLLECTIONS ===
   collections: {
     async getAccessToken() {
-      const { MOMO_TARGET_ENVIRONMENT, MOMO_PRIMARY_KEY, MOMO_USER_ID, MOMO_USER_SECRET } = process.env;
+      const { MOMO_TARGET_ENVIRONMENT, MOMO_PRIMARY_KEY, MOMOUSER_ID, MOMOUSER_SECRET } = process.env;
       
-      if (!MOMO_TARGET_ENVIRONMENT || !MOMO_PRIMARY_KEY || !MOMO_USER_ID || !MOMO_USER_SECRET) {
+      if (!MOMO_TARGET_ENVIRONMENT || !MOMO_PRIMARY_KEY || !MOMOUSER_ID || !MOMOUSER_SECRET) {
         throw new Error("Missing Collections env vars");
       }
 
-      const authToken = Buffer.from(`${MOMO_USER_ID}:${MOMO_USER_SECRET}`).toString("base64");
+      const authToken = Buffer.from(`${MOMOUSER_ID}:${MOMOUSER_SECRET}`).toString("base64");
       
       const response = await axios.post(
         `${MOMO_TARGET_ENVIRONMENT}/collection/token/`,
@@ -21,7 +43,7 @@ const momo = {
         {
           headers: {
             "Ocp-Apim-Subscription-Key": MOMO_PRIMARY_KEY,
-            Authorization: `Basic ${authToken}`,
+            Authorization: `Basic ${authToken}`,                         
           },
         }
       );
@@ -29,7 +51,7 @@ const momo = {
       return response.data.access_token;
     },
 
-    async requestToPay(payload: unknown) {
+    async requestToPay(payload: RequestToPayPayload) {
       const { MOMO_TARGET_ENVIRONMENT, MOMO_PRIMARY_KEY } = process.env;
       const accessToken = await this.getAccessToken();
       const referenceId = uuidv4();
@@ -81,6 +103,7 @@ const momo = {
   
       const authToken = Buffer.from(`${MOMO_DISBURSE_USER_ID}:${MOMO_DISBURSE_USER_SECRET}`).toString("base64");
       
+      
       const response = await axios.post(
         `${MOMO_TARGET_ENVIRONMENT}/disbursement/token/`,
         null,
@@ -95,7 +118,7 @@ const momo = {
       return response.data.access_token;
     },
   
-    async transfer(payload: unknown) {
+    async transfer(payload: TransferPayload) {
       const { MOMO_TARGET_ENVIRONMENT, MOMO_PRIMARY_KEY_DISBURSEMENTS } = process.env;
       const accessToken = await this.getAccessToken();
       const referenceId = uuidv4();
@@ -113,9 +136,97 @@ const momo = {
           },
         }
       );
+      
   
       return referenceId;
     },
+  async validateAccountHolder(
+  accountHolderIdType: string,
+  accountHolderId: string
+) {
+  const {
+    MOMO_TARGET_ENVIRONMENT,
+    MOMO_PRIMARY_KEY_DISBURSEMENTS,
+  } = process.env;
+
+  const accessToken =
+    await this.getAccessToken();
+
+  const response = await axios.get(
+    `${MOMO_TARGET_ENVIRONMENT}/disbursement/v1_0/accountholder/${accountHolderIdType}/${accountHolderId}/active`,
+    {
+      headers: {
+        "X-Target-Environment": "sandbox",
+        "Ocp-Apim-Subscription-Key":
+          MOMO_PRIMARY_KEY_DISBURSEMENTS,
+        Authorization: `Bearer ${accessToken}`,
+      },
+    }
+  );
+
+  return response.data;
+},
+    // === ACCOUNT VALIDATION ===
+accountValidation: {
+  async validateAccount(
+    accountHolderId: string,
+    accountHolderIdType = "msisdn"
+  ) {
+    const {
+      MOMO_TARGET_ENVIRONMENT,
+      MOMO_PRIMARY_KEY,
+    } = process.env;
+
+    const accessToken =
+      await momo.collections.getAccessToken();
+    
+    const url =
+  `${MOMO_TARGET_ENVIRONMENT}/collection/v1_0/accountholder/${accountHolderIdType.toLowerCase()}/${accountHolderId}/active`;
+
+console.log("Validation URL:", url);
+
+    const response = await axios.get(
+      `${MOMO_TARGET_ENVIRONMENT}/collection/v1_0/accountholder/${accountHolderIdType.toLowerCase()}/${accountHolderId}/active`,
+      {
+        headers: {
+          "X-Target-Environment": "sandbox",
+          "Ocp-Apim-Subscription-Key": MOMO_PRIMARY_KEY,
+          Authorization: `Bearer ${accessToken}`,
+        },
+      }
+    );
+
+    return response.data;
+  },
+},
+
+// === BALANCE ===
+balance: {
+  async getCollectionBalance() {
+    const { MOMO_TARGET_ENVIRONMENT, MOMO_PRIMARY_KEY } = process.env;
+
+    const accessToken =
+      await momo.collections.getAccessToken();
+
+    const response = await axios.get(
+      `${MOMO_TARGET_ENVIRONMENT}/collection/v1_0/account/balance`,
+      {
+        headers: {
+          "X-Target-Environment": "sandbox",
+          "Ocp-Apim-Subscription-Key": MOMO_PRIMARY_KEY,
+          Authorization: `Bearer ${accessToken}`,
+          
+        },
+      }
+    );
+
+    return response.data;
+  },
+
+  async getDisbursementBalance() {
+    return await momo.disbursements.getBalance();
+  },
+},
 
     // ✅ ADD THIS METHOD
     async getTransactionStatus(referenceId: string) {

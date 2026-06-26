@@ -19,9 +19,9 @@ export async function POST(
     deliveryMethod,
     deliveryCost,
     deliveryQuoteId,
-    deliveryProvider,   // ← new
-    deliveryLat,        // ← new
-    deliveryLng,        // ← new
+    deliveryProvider,   
+    deliveryLat,        
+    deliveryLng,        
   } = await req.json();
 
   const shop     = await prisma.shop.findUnique({ where: { id: shopId } });

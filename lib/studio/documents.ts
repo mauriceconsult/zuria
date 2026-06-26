@@ -14,7 +14,7 @@ export async function generateStrategyDoc(context: PlatformContext) {
           new Paragraph({
             children: [
               new TextRun({
-                text: "Studio AI Strategy Report",
+                text: "Max AI Studio Strategy Report",
                 bold: true,
                 size: 32,
               }),
