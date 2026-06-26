@@ -36,9 +36,9 @@ export async function POST(
       deliveryMethod,
       deliveryCost,
       deliveryQuoteId,
-      deliveryProvider, // ← new
-      deliveryLat,      // ← new
-      deliveryLng,      // ← new
+      deliveryProvider, 
+      deliveryLat,      
+      deliveryLng,      
       orderItems: {
         create: productIds.map((productId: string) => ({ productId })),
       },
