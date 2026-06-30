@@ -131,6 +131,7 @@ model Order {
   shop       Shop        @relation("ShopToOrder", fields: [shopId], references: [id])
   orderItems OrderItem[]
   jobs       DeliveryJob[]
+  disbursements Disbursement[]              // ← add this line
   isPaid     Boolean     @default(false)
   phone      String      @default("")
   address    String      @default("")
@@ -138,29 +139,50 @@ model Order {
   platformFee Decimal?
   shopPayout  Decimal?
 
+  shopPayoutStatus  String  @default("not_applicable")  // ← add this line
+  riderPayoutStatus String  @default("not_applicable")  // ← add this line
+
   deliveredAt     DateTime?
   refundRequest   RefundRequest?
   deliveryLat         Float?
   deliveryLng         Float?
 
-  // Payment
-  paymentMethod String  @default("stripe") // "stripe" | "mobile_money"
-  paymentRef    String? // stripe session id or momo referenceId
-  paymentStatus String  @default("pending") // "pending" | "completed" | "failed"
+  paymentMethod String  @default("stripe")
+  paymentRef    String?
+  paymentStatus String  @default("pending")
 
-  // Delivery
-  deliveryMethod      String? // "uber_direct" | "self_pickup" | "rider"
+  deliveryMethod      String?
   deliveryQuoteId     String?
-  deliveryStatus      String   @default("pending") // "pending" | "dispatched" | "delivered"
-  deliveryRef         String? // uber direct delivery id or rider momo referenceId
+  deliveryStatus      String   @default("pending")
+  deliveryRef         String?
   deliveryCost        Decimal?
-  deliveryProvider    String? // "uber_direct" | "glovo" | "flat_rate" etc.
-  deliveryTrackingUrl String? // for customer tracking
+  deliveryProvider    String?
+  deliveryTrackingUrl String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([shopId])
+}
+model Disbursement {
+  id                String   @id @default(uuid())
+  orderId           String
+  order             Order    @relation(fields: [orderId], references: [id])
+  recipientType     String   // "shop" | "rider"
+  phone             String
+  amount            Decimal
+  currency          String   @default("UGX")
+  momoReferenceId   String   @unique
+  momoStatus        String   @default("PROCESSING") // PROCESSING | SUCCESSFUL | FAILED
+  momoTransactionId String?
+  paidAt            DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([orderId])
+  @@index([momoReferenceId])
+  @@index([momoStatus])
 }
 model RefundRequest {
   id              String   @id @default(uuid())
@@ -195,34 +217,35 @@ model OrderItem {
   @@index([orderId])
   @@index([productId])
 }
-// ─────────────────────────────────────────────────────────────────────────────
-// PRISMA SCHEMA ADDITIONS
-// Add these models to your existing schema.prisma
-// ─────────────────────────────────────────────────────────────────────────────
 
-// prisma/schema.prisma — additions to Rider model
-// Run: npx prisma migrate dev --name add_rider_approval_source
+// ── New: VehicleType enum ─────────────────────────────────────────────────────
+// Enforced at the database level — matches the three tiers priced in
+// lib/delivery/providers/custom.ts. Postgres will reject any value
+// outside this set at insert/update time.
 
-// ── Updated Rider model ───────────────────────────────────────────────────────
+enum VehicleType {
+  bicycle
+  motorcycle
+  car
+}
+
+// ── Updated: Rider model ──────────────────────────────────────────────────────
 
 model Rider {
   id           String        @id @default(uuid())
-  clerkId      String        @unique // used as external identifier for riders (e.g. in Uber Direct)
+  clerkId      String        @unique
   name         String
   phone        String
   email        String
-  vehicleType  String        @default("motorcycle") // motorcycle | bicycle | car
+  vehicleType  VehicleType   @default(motorcycle)   // ← was String @default("motorcycle")
 
-  // Approval
   isApproved   Boolean       @default(false)
-  approvedBy   String?       // "shop" | "platform"
-  approvedById String?       // shopId (if shop) or adminClerkId (if platform)
+  approvedBy   String?
+  approvedById String?
   approvedAt   DateTime?
 
-  // Availability
   isActive     Boolean       @default(false)
 
-  // Stats
   rating       Float         @default(5.0)
   totalJobs    Int           @default(0)
 
@@ -235,25 +258,28 @@ model Rider {
   @@index([approvedBy])
 }
 
-// ── DeliveryJob model (unchanged — shown for reference) ──────────────────────
+// ── Updated: DeliveryJob model ────────────────────────────────────────────────
 
 model DeliveryJob {
-  id           String    @id @default(uuid())
-  orderId      String    @unique
-  order        Order     @relation(fields: [orderId], references: [id])
+  id           String        @id @default(uuid())
+  orderId      String        @unique
+  order        Order         @relation(fields: [orderId], references: [id])
+  shopId       String?
   riderId      String?
-  rider        Rider?    @relation(fields: [riderId], references: [id])
-  status       String    @default("pending")
-  deliveryCost Float     @default(0)
+  rider        Rider?        @relation(fields: [riderId], references: [id])
+  status       String        @default("pending")
+  deliveryCost Float         @default(0)
+  vehicleType  VehicleType?                         // ← was String?, now nullable enum
   lastLat      Float?
   lastLng      Float?
   acceptedAt   DateTime?
   deliveredAt  DateTime?
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
 
   @@index([status])
   @@index([riderId])
+  @@index([shopId])
 }
 
 

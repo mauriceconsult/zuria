@@ -1,9 +1,3 @@
-// lib/delivery/providers/custom.ts
-//
-// Vendly's own delivery network.
-// Instead of calling a third-party API, this posts a DeliveryJob
-// to our own database. Rider app picks it up via polling.
-
 import type {
   DeliveryProvider,
   DeliveryQuoteRequest,
@@ -12,10 +6,26 @@ import type {
   CreateDeliveryResponse,
 } from "@/lib/delivery/types";
 import { prisma } from "@/lib/prisma";
+import { VehicleType } from "@prisma/client";  // ← now sourced from Prisma, not declared locally
+
+interface VehicleTier {
+  baseFare: number;
+  perKm:    number;
+  maxKm:    number | null;
+  speedKmh: number;
+}
+
+const VEHICLE_TIERS: Record<VehicleType, VehicleTier> = {
+  bicycle:    { baseFare: 2_000, perKm:   800, maxKm:  3,    speedKmh: 15 },
+  motorcycle: { baseFare: 3_000, perKm: 1_200, maxKm:  8,    speedKmh: 35 },
+  car:        { baseFare: 5_000, perKm: 2_000, maxKm:  null, speedKmh: 25 },
+};
 
 function haversineKm(
-  lat1: number, lng1: number,
-  lat2: number, lng2: number,
+  lat1: number,
+  lng1: number,
+  lat2: number,
+  lng2: number,
 ): number {
   const R = 6371;
   const dLat = ((lat2 - lat1) * Math.PI) / 180;
@@ -23,53 +33,81 @@ function haversineKm(
   const a =
     Math.sin(dLat / 2) ** 2 +
     Math.cos((lat1 * Math.PI) / 180) *
-    Math.cos((lat2 * Math.PI) / 180) *
-    Math.sin(dLng / 2) ** 2;
+      Math.cos((lat2 * Math.PI) / 180) *
+      Math.sin(dLng / 2) ** 2;
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
-// Pricing: UGX 3,000 base + UGX 1,200/km
-// Adjust as you learn real costs from SafeBoda/Uber data
-const BASE_FARE  = 3_000;
-const PER_KM     = 1_200;
+export function availableVehicles(km: number): VehicleType[] {
+  return (Object.entries(VEHICLE_TIERS) as [VehicleType, VehicleTier][])
+    .filter(([, tier]) => tier.maxKm === null || km <= tier.maxKm)
+    .sort(
+      ([, a], [, b]) => a.baseFare + km * a.perKm - (b.baseFare + km * b.perKm),
+    )
+    .map(([type]) => type);
+}
+
+function quoteForVehicle(km: number, vehicleType: VehicleType) {
+  const tier = VEHICLE_TIERS[vehicleType];
+
+  if (tier.maxKm !== null && km > tier.maxKm) {
+    const available = availableVehicles(km).join(", ") || "none";
+    throw new Error(
+      `${vehicleType} is not available for ${km.toFixed(1)} km ` +
+        `(max ${tier.maxKm} km). Available: ${available}.`,
+    );
+  }
+
+  return {
+    cost: Math.round(tier.baseFare + km * tier.perKm),
+    estimatedMinutes: Math.round((km / tier.speedKmh) * 60 + 5),
+  };
+}
 
 export const customProvider: DeliveryProvider = {
   name: "custom",
 
+  // ── Quote: distance + vehicle tier only. No fee logic here. ───────────────
   async getQuote(req: DeliveryQuoteRequest): Promise<DeliveryQuoteResponse> {
     const km = haversineKm(
-      req.origin.lat, req.origin.lng,
-      req.destination.lat, req.destination.lng,
+      req.origin.lat,
+      req.origin.lng,
+      req.destination.lat,
+      req.destination.lng,
     );
 
-    const cost             = Math.round(BASE_FARE + km * PER_KM);
-    const estimatedMinutes = Math.round(10 + km * 4); // ~15km/h average in Kampala
+    const vehicleType: VehicleType = req.vehicleType ?? "motorcycle";
+    const { cost, estimatedMinutes } = quoteForVehicle(km, vehicleType);
 
     return {
-      quoteId:          `custom_quote_${Date.now()}`,
-      provider:         "custom",
+      quoteId: `custom_quote_${Date.now()}`,
+      provider: "custom",
       cost,
-      currency:         "UGX",
+      currency: "UGX",
       estimatedMinutes,
-      expiresAt:        new Date(Date.now() + 15 * 60_000).toISOString(),
+      expiresAt: new Date(Date.now() + 15 * 60_000).toISOString(),
+      distanceKm: parseFloat(km.toFixed(2)),
+      vehicleType,
+      maxKm: VEHICLE_TIERS[vehicleType].maxKm,
     };
   },
 
+  // ── Job creation: matches the actual call shape in handleDelivery() ───────
   async createJob(req: CreateDeliveryRequest): Promise<CreateDeliveryResponse> {
-    // Write directly to DB — no external API call needed
-    const job = await prisma.deliveryJob.create({
-      data: {
-        orderId:      req.orderId,
-        deliveryCost: 0, // will be set from the quote stored on the order
-        status:       "pending",
+    const job = await prisma.deliveryJob.upsert({
+      where: { orderId: req.orderId },
+      update: { status: "pending" },
+      create: {
+        orderId: req.orderId,
+        shopId: req.shopId,
+        status: "pending",
       },
     });
 
     return {
       deliveryId: job.id,
-      status:     "pending",
-      provider:   "custom",
-      // No trackingUrl yet — future: vendly.maxnovate.com/track/:jobId
+      status: "pending",
+      provider: "custom",
     };
   },
 };

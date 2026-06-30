@@ -1,5 +1,26 @@
 // lib/delivery/types.ts
 
+import type { VehicleType } from "@prisma/client"; // ← was: import type { VehicleType } from "./providers/custom"
+
+export interface DeliveryQuoteRequest {
+  origin: LatLng & { address: string };
+  destination: LatLng & { address: string };
+  vehicleType?: VehicleType;
+}
+
+export interface DeliveryQuoteResponse {
+  quoteId: string;
+  provider: string;
+  cost: number;
+  currency: string;
+  estimatedMinutes: number;
+  expiresAt: string;
+  distanceKm?: number;
+  vehicleType?: VehicleType;
+  maxKm?: number | null;
+  raw?: unknown;
+}
+
 // ── Shared primitives ─────────────────────────────────────────────────
 
 export interface LatLng {
@@ -24,40 +45,44 @@ export interface DeliveryQuoteRequest {
   destination: LatLng & {
     address: string;
   };
+  vehicleType?: VehicleType; // ← added
 }
 
 export interface DeliveryQuoteResponse {
-  quoteId:          string;
-  provider:         string;
-  cost:             number;
-  currency:         string;
+  quoteId: string;
+  provider: string;
+  cost: number;
+  currency: string;
   estimatedMinutes: number;
-  expiresAt:        string;
-  raw?:             unknown;
+  expiresAt: string;
+  distanceKm?: number; // ← added
+  vehicleType?: VehicleType; // ← added
+  maxKm?: number | null; // ← added
+  raw?: unknown;
 }
 
 // ── Create job ────────────────────────────────────────────────────────
 
 export interface CreateDeliveryRequest {
-  quoteId:  string;
-  orderId:  string;
-  shopId:   string;
+  quoteId: string;
+  orderId: string;
+  shopId: string;
   provider: string;
   origin: LatLng & {
-    address:      string;
-    contactName:  string;
+    address: string;
+    contactName: string;
     contactPhone: string;
   };
   destination: LatLng & {
-    address:      string;
-    contactName:  string;
+    address: string;
+    contactName: string;
     contactPhone: string;
   };
 }
 
 export interface CreateDeliveryResponse {
-  deliveryId:   string;
+  deliveryId: string;
   trackingUrl?: string;
-  status:       string;
-  provider:     string;
+  status: string;
+  provider: string;
 }

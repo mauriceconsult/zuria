@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { getDeliveryProvider } from "@/lib/delivery/registry";
 import { momo } from "@/lib/momo";
 import { calculateFees } from "@/lib/platform";
-import { Prisma } from "@prisma/client";
+import { Prisma, VehicleType } from "@prisma/client";
 import type { ApprovalSource } from "@/lib/platform";
 
 type OrderWithRelations = Prisma.OrderGetPayload<{
@@ -35,16 +35,15 @@ export async function onPaymentConfirmed(orderId: string): Promise<void> {
 
   // ── 2. Find assigned rider (if delivery job exists) ────────────────────────
   const deliveryJob = await prisma.deliveryJob.findUnique({
-    where:   { orderId },
+    where: { orderId },
     include: { rider: true },
   });
 
-  // Determine rider approval source for fee calculation
   const approvalSource: ApprovalSource =
     deliveryJob?.rider?.approvedBy === "platform" ? "platform" : "shop";
 
   // ── 3. Calculate fees ──────────────────────────────────────────────────────
-  const subtotal     = order.orderItems.reduce(
+  const subtotal = order.orderItems.reduce(
     (sum, item) => sum + item.product.price.toNumber(),
     0,
   );
@@ -64,134 +63,207 @@ export async function onPaymentConfirmed(orderId: string): Promise<void> {
     vendlyTotal,
   });
 
-  // ── 4. Mark order as paid ──────────────────────────────────────────────────
-  await prisma.order.update({
-    where: { id: orderId },
-    data: {
-      isPaid:        true,
-      paymentStatus: "paid",
-      shopPayout,
-      platformFee,
-    },
-  });
-
-  // ── 5. Archive sold products ───────────────────────────────────────────────
+  // ── 4. Mark order paid + archive products atomically ────────────────────────
   const productIds = order.orderItems.map((item) => item.productId);
-  await prisma.product.updateMany({
-    where: { id: { in: productIds } },
-    data:  { isArchived: true },
-  });
 
-  // ── 6. Disburse to shop ────────────────────────────────────────────────────
+  await prisma.$transaction([
+    prisma.order.update({
+      where: { id: orderId },
+      data: {
+        isPaid: true,
+        paymentStatus: "completed", // matches schema's documented enum-by-convention
+        shopPayout,
+        platformFee,
+        shopPayoutStatus: order.shop.momoPhone ? "pending" : "not_applicable",
+        riderPayoutStatus: riderPayout > 0 ? "pending" : "not_applicable",
+      },
+    }),
+    prisma.product.updateMany({
+      where: { id: { in: productIds } },
+      data: { isArchived: true },
+    }),
+  ]);
+
+  // ── 5. Disburse to shop + rider in parallel, failure-isolated ──────────────
+  const disbursements: Promise<void>[] = [];
+
   if (order.paymentMethod === "mobile_money" && order.shop.momoPhone) {
-    await disburseToPhone({
-      phone:    order.shop.momoPhone,
-      amount:   shopPayout,
-      currency: order.shop.currency ?? "UGX",
-      orderId:  order.id,
-      note:     `Shop payout for order ${order.id}`,
-    });
-  }
-
-  // ── 7. Disburse to rider ───────────────────────────────────────────────────
-  // Only if there's an assigned rider with a phone number and delivery cost
-  if (deliveryJob?.rider?.phone && deliveryCost > 0 && riderPayout > 0) {
-    await disburseToPhone({
-      phone:    deliveryJob.rider.phone,
-      amount:   riderPayout,
-      currency: order.shop.currency ?? "UGX",
-      orderId:  order.id,
-      note:     `Dukaboda delivery payout — order ${order.id}${
-        deliveryFee > 0
-          ? ` (platform fee UGX ${deliveryFee} deducted)`
-          : ""
-      }`,
-    });
-
-    console.log(
-      `[RIDER_PAYOUT] Rider ${deliveryJob.rider.name} receives UGX ${riderPayout}` +
-      (deliveryFee > 0 ? ` (Vendly kept UGX ${deliveryFee})` : " (full fee — shop-linked rider)"),
+    disbursements.push(
+      disburseToPhone({
+        recipientType: "shop",
+        phone: order.shop.momoPhone,
+        amount: shopPayout,
+        currency: order.shop.currency,
+        orderId: order.id,
+        note: `Shop payout for order ${order.id}`,
+      })
+        .then(() =>
+          prisma.order.update({
+            where: { id: orderId },
+            data: { shopPayoutStatus: "sent" },
+          }),
+        )
+        .then(() => {})
+        .catch(async (err) => {
+          console.error(`[SHOP_DISBURSE_ERROR] Order ${orderId}:`, err);
+          await prisma.order.update({
+            where: { id: orderId },
+            data: { shopPayoutStatus: "failed" },
+          });
+        }),
     );
   }
 
-  // ── 8. Trigger delivery ────────────────────────────────────────────────────
-  const needsDelivery =
+  if (deliveryJob?.rider?.phone && riderPayout > 0) {
+    disbursements.push(
+      disburseToPhone({
+        recipientType: "rider",
+        phone: deliveryJob.rider.phone,
+        amount: riderPayout,
+        currency: order.shop.currency,
+        orderId: order.id,
+        note: `Dukaboda delivery payout — order ${order.id}${
+          deliveryFee > 0 ? ` (platform fee UGX ${deliveryFee} deducted)` : ""
+        }`,
+      })
+        .then(() => {
+          console.log(
+            `[RIDER_PAYOUT] Rider ${deliveryJob.rider!.name} receives UGX ${riderPayout}` +
+              (deliveryFee > 0
+                ? ` (Vendly kept UGX ${deliveryFee})`
+                : " (full fee — shop-linked rider)"),
+          );
+          return prisma.order.update({
+            where: { id: orderId },
+            data: { riderPayoutStatus: "sent" },
+          });
+        })
+        .then(() => {})
+        .catch(async (err) => {
+          console.error(`[RIDER_DISBURSE_ERROR] Order ${orderId}:`, err);
+          await prisma.order.update({
+            where: { id: orderId },
+            data: { riderPayoutStatus: "failed" },
+          });
+        }),
+    );
+  }
+
+  await Promise.allSettled(disbursements);
+
+  // ── 6. Trigger delivery ──────────────────────────────────────────────────
+  if (
     order.deliveryMethod !== "pickup" &&
     order.deliveryQuoteId &&
     order.deliveryProvider &&
     order.address &&
-    order.deliveryLat &&
-    order.deliveryLng &&
-    order.shop.latitude &&
-    order.shop.longitude;
-
-  if (needsDelivery) {
-    await handleDelivery(order, deliveryCost);
+    order.deliveryLat != null &&
+    order.deliveryLng != null &&
+    order.shop.latitude != null &&
+    order.shop.longitude != null
+  ) {
+    await handleDelivery(order, {
+      quoteId: order.deliveryQuoteId,
+      provider: order.deliveryProvider,
+      shopLat: order.shop.latitude,
+      shopLng: order.shop.longitude,
+      deliveryLat: order.deliveryLat,
+      deliveryLng: order.deliveryLng,
+      address: order.address,
+      deliveryCost,
+      vehicleType: deliveryJob?.rider?.vehicleType,
+    });
   }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Shared MoMo disburse helper
+// Shared MoMo disburse helper — persists a Disbursement record
 // ─────────────────────────────────────────────────────────────────────────────
 
 async function disburseToPhone({
+  recipientType,
   phone,
   amount,
   currency,
   orderId,
   note,
 }: {
-  phone:    string;
-  amount:   number;
+  recipientType: "shop" | "rider";
+  phone: string;
+  amount: number;
   currency: string;
-  orderId:  string;
-  note:     string;
-}) {
-  try {
-    const referenceId = await momo.disbursements.transfer({
-      amount:    String(Math.round(amount)),
-      currency,
-      externalId: orderId,
-      payee: {
-        partyIdType: "MSISDN",
-        partyId:     phone,
-      },
-      payerMessage: note,
-      payeeNote:    note,
-    });
+  orderId: string;
+  note: string;
+}): Promise<void> {
+  const referenceId = await momo.disbursements.transfer({
+    amount: String(Math.round(amount)),
+    currency,
+    externalId: orderId,
+    payee: { partyIdType: "MSISDN", partyId: phone },
+    payerMessage: note,
+    payeeNote: note,
+  });
 
-    const status = await momo.disbursements.getTransactionStatus(referenceId);
-    console.log(`[DISBURSE] ${phone} — UGX ${amount} — Status: ${status.status}`);
-  } catch (error) {
-    console.error(`[DISBURSE_ERROR] ${phone} — Order ${orderId}:`, error);
-  }
+  // Persisted immediately — this row is what the MoMo webhook dispatcher
+  // matches against when the SUCCESSFUL/FAILED callback arrives later.
+  await prisma.disbursement.create({
+    data: {
+      orderId,
+      recipientType,
+      phone,
+      amount,
+      currency,
+      momoReferenceId: referenceId,
+      momoStatus: "PROCESSING",
+    },
+  });
+
+  console.log(
+    `[DISBURSE] ${recipientType} ${phone} — UGX ${amount} — ref ${referenceId}`,
+  );
+  // Final status resolved by webhook, not polled synchronously here.
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Handle delivery job creation
 // ─────────────────────────────────────────────────────────────────────────────
 
-async function handleDelivery(order: OrderWithRelations, deliveryCost: number) {
+interface DeliveryParams {
+  quoteId: string;
+  provider: string;
+  shopLat: number;
+  shopLng: number;
+  deliveryLat: number;
+  deliveryLng: number;
+  address: string;
+  deliveryCost: number;
+  vehicleType?: VehicleType;
+}
+
+async function handleDelivery(
+  order: OrderWithRelations,
+  params: DeliveryParams,
+) {
   try {
     const provider = getDeliveryProvider();
 
     const delivery = await provider.createJob({
-      quoteId:  order.deliveryQuoteId!,
-      orderId:  order.id,
-      shopId:   order.shopId,
-      provider: order.deliveryProvider!,
+      quoteId: params.quoteId,
+      orderId: order.id,
+      shopId: order.shopId,
+      provider: params.provider,
       origin: {
-        lat:          order.shop.latitude!,
-        lng:          order.shop.longitude!,
-        address:      order.shop.address ?? "Shop address",
-        contactName:  order.shop.name,
+        lat: params.shopLat,
+        lng: params.shopLng,
+        address: order.shop.address ?? "Shop address",
+        contactName: order.shop.name,
         contactPhone: order.shop.phone ?? "",
       },
       destination: {
-        lat:          order.deliveryLat!,
-        lng:          order.deliveryLng!,
-        address:      order.address!,
-        contactName:  "Customer",
+        lat: params.deliveryLat,
+        lng: params.deliveryLng,
+        address: params.address,
+        contactName: "Customer",
         contactPhone: order.phone ?? "",
       },
     });
@@ -199,20 +271,27 @@ async function handleDelivery(order: OrderWithRelations, deliveryCost: number) {
     await prisma.order.update({
       where: { id: order.id },
       data: {
-        deliveryRef:        delivery.deliveryId,
-        deliveryStatus:     delivery.status,
+        deliveryRef: delivery.deliveryId,
+        deliveryStatus: delivery.status,
         deliveryTrackingUrl: delivery.trackingUrl ?? null,
       },
     });
 
-    // Also update the DeliveryJob with actual cost
+    // DeliveryJob now carries shopId + vehicleType, both real columns.
+    // deliveryCost is intentionally NOT overwritten here if a job already
+    // exists from quote time — only set on first creation.
     await prisma.deliveryJob.upsert({
-      where:  { orderId: order.id },
-      update: { deliveryCost },
+      where: { orderId: order.id },
+      update: {
+        shopId: order.shopId,
+        vehicleType: params.vehicleType,
+      },
       create: {
-        orderId:      order.id,
-        deliveryCost,
-        status:       "pending",
+        orderId: order.id,
+        shopId: order.shopId,
+        deliveryCost: params.deliveryCost,
+        vehicleType: params.vehicleType,
+        status: "pending",
       },
     });
 
@@ -221,7 +300,7 @@ async function handleDelivery(order: OrderWithRelations, deliveryCost: number) {
     console.error(`[DELIVERY_ERROR] Order ${order.id}:`, err);
     await prisma.order.update({
       where: { id: order.id },
-      data:  { deliveryStatus: "failed" },
+      data: { deliveryStatus: "failed" },
     });
   }
 }
