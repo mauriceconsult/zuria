@@ -27,6 +27,7 @@ model Shop {
   products       Product[]       @relation("ShopToProduct")
   refundRequests RefundRequest[] @relation("ShopToRefundRequest")
   sizes          Size[]          @relation("ShopToSize")
+  deliveryJobs DeliveryJob[]
 
   @@index([userId])
 }
@@ -130,33 +131,73 @@ model Image {
 
 model Order {
   id                  String         @id @default(uuid())
+
   shopId              String
+
   isPaid              Boolean        @default(false)
-  phone               String         @default("")
-  address             String         @default("")
-  createdAt           DateTime       @default(now())
-  updatedAt           DateTime       @updatedAt
-  deliveryCost        Decimal?
+
+  paymentMethod       String         @default("stripe")
+  paymentStatus       String         @default("pending")
+  paymentRef          String?
+
   deliveryMethod      String?
+  deliveryProvider    String?
+  deliveryQuoteId     String?
   deliveryRef         String?
   deliveryStatus      String         @default("pending")
-  paymentMethod       String         @default("stripe")
-  paymentRef          String?
-  paymentStatus       String         @default("pending")
+  deliveryTrackingUrl String?
+
+  deliveryCost        Decimal?
   platformFee         Decimal?
   shopPayout          Decimal?
-  deliveryProvider    String?
-  deliveryTrackingUrl String?
-  deliveryQuoteId     String?
-  deliveredAt         DateTime?
+  riderPayout         Decimal?
+
+  shopPayoutStatus    String         @default("not_applicable")
+  riderPayoutStatus   String         @default("not_applicable")
+
+  phone               String         @default("")
+  address             String         @default("")
   deliveryLat         Float?
   deliveryLng         Float?
-  jobs                DeliveryJob?
+  deliveredAt         DateTime?
+
+  createdAt           DateTime       @default(now())
+  updatedAt           DateTime       @updatedAt
+
   shop                Shop           @relation("ShopToOrder", fields: [shopId], references: [id])
+  jobs                DeliveryJob?
   orderItems          OrderItem[]
+  disbursements Disbursement[]
   refundRequest       RefundRequest?
 
   @@index([shopId])
+}
+model Disbursement {
+  id              String   @id @default(uuid())
+
+  orderId         String
+  order           Order    @relation(fields: [orderId], references: [id])
+
+  recipientType   String   // "shop" | "rider"
+
+  phone           String
+
+  amount          Decimal
+  currency        String
+
+  momoReferenceId String   @unique
+
+  momoStatus      String   @default("PROCESSING")
+  failureReason   String?
+
+  completedAt     DateTime?
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([orderId])
+  @@index([momoStatus])
+  @@index([recipientType])
 }
 
 model RefundRequest {
@@ -192,40 +233,60 @@ model OrderItem {
   @@index([productId])
 }
 
+enum RiderApprovalSource {
+  shop
+  platform
+}
+
 model Rider {
-  id          String         @id @default(uuid())
-  clerkId     String         @unique
-  name        String
-  phone       String
-  email       String
+  id            String               @id @default(uuid())
+  clerkId       String               @unique
+  name          String
+  phone         String
+  email         String
 
-  vehicleType VehicleType    @default(motorcycle)
+  vehicleType   VehicleType          @default(motorcycle)
 
-  isActive    Boolean        @default(true)
-  rating      Float          @default(5.0)
-  totalJobs   Int            @default(0)
+  isActive      Boolean              @default(true)
 
-  createdAt   DateTime       @default(now())
-  updatedAt   DateTime       @updatedAt
+  isApproved    Boolean              @default(false)
+  approvedBy    RiderApprovalSource?
+  approvedById  String?
+  approvedAt    DateTime?
 
-  jobs        DeliveryJob[]
+  rating        Float                @default(5.0)
+
+  createdAt     DateTime             @default(now())
+  updatedAt     DateTime             @updatedAt
+
+  jobs          DeliveryJob[]
 }
 
 model DeliveryJob {
-  id           String    @id @default(uuid())
-  orderId      String    @unique
+  id           String      @id @default(uuid())
+  orderId      String      @unique
+  shopId       String
   riderId      String?
-  status       String    @default("pending")
-  deliveryCost Float     @default(0)
+
+  vehicleType  VehicleType?
+
+  status       String      @default("pending")
+  deliveryCost Float       @default(0)
+
   lastLat      Float?
   lastLng      Float?
+
   acceptedAt   DateTime?
   deliveredAt  DateTime?
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
-  order        Order     @relation(fields: [orderId], references: [id])
-  rider        Rider?    @relation(fields: [riderId], references: [id])
+
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+  shops Shop[]
+
+  order         Order      @relation(fields: [orderId], references: [id])
+  rider         Rider?     @relation(fields: [riderId], references: [id])
 
   @@index([status])
   @@index([riderId])
+  @@index([vehicleType])
 }

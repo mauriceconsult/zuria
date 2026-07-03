@@ -1,5 +1,3 @@
-// lib/payment.ts  (Zuria)
-
 import { prisma } from "@/lib/prisma";
 import { getDeliveryProvider } from "@/lib/delivery/registry";
 import { momo } from "@/lib/momo";

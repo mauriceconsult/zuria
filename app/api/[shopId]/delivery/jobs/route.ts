@@ -50,8 +50,12 @@ export async function GET(req: NextRequest) {
   return NextResponse.json(shaped);
 }
 
-export async function POST(req: NextRequest) {
+export async function POST(
+  req: NextRequest,
+  { params }: { params: Promise<{ shopId: string }> }
+) {
   // Internal only — called by onPaymentConfirmed, not the rider app
+  const { shopId } = await params;
   const { userId } = await auth();
   if (!userId) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -59,10 +63,15 @@ export async function POST(req: NextRequest) {
 
   const { orderId, deliveryCost } = await req.json();
 
-  const job = await prisma.deliveryJob.create({
-    data: { orderId, deliveryCost, status: "pending" },
-  });
+ const job = await prisma.deliveryJob.create({
+   data: {
+     orderId,
+     shopId,
+     deliveryCost,
+     status: "pending",
+   },
+ });
 
-  return NextResponse.json(job, { status: 201 });
+ return NextResponse.json(job, { status: 201 });
 }
 
