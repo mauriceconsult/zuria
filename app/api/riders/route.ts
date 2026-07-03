@@ -3,6 +3,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { VehicleType } from "@prisma/client";
 
+interface PrismaError extends Error {
+  code?: string;
+  meta?: Record<string, unknown>;
+}
+
 const VALID_VEHICLE_TYPES = Object.values(VehicleType);
 
 export async function POST(req: NextRequest) {
@@ -73,25 +78,25 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(rider, { status: 200 });
 
   } catch (error: unknown) {
-    // Log the full error server-side so Vercel logs show exactly what went wrong
-    console.error("[/api/riders] Unhandled error:", {
-      message: error instanceof Error ? error.message : String(error),
-      code:    (error as any)?.code,   // P2002 = unique, P2003 = foreign key
-      meta:    (error as any)?.meta,
-    });
+  const prismaError = error as PrismaError;
 
-    // P2002 = unique constraint — clerkId already exists but upsert should
-    // handle this; if we reach here via P2002 something else is wrong
-    if ((error as any)?.code === "P2002") {
-      return NextResponse.json(
-        { error: "Rider already registered" },
-        { status: 409 }
-      );
-    }
+  console.error("[/api/riders] Unhandled error:", {
+    message:
+      error instanceof Error ? error.message : String(error),
+    code: prismaError.code,
+    meta: prismaError.meta,
+  });
 
+  if (prismaError.code === "P2002") {
     return NextResponse.json(
-      { error: "Registration failed — please try again" },
-      { status: 500 }
+      { error: "Rider already registered" },
+      { status: 409 }
     );
   }
+
+  return NextResponse.json(
+    { error: "Registration failed — please try again" },
+    { status: 500 }
+  );
+}
 }

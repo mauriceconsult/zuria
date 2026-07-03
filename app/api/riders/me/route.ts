@@ -28,15 +28,16 @@ export async function GET(req: NextRequest) {
   return NextResponse.json(rider);
 }
 
-export async function PATCHStatus2(req: NextRequest) {
+export async function PATCH(req: NextRequest) {
   const { userId } = await auth();
-  if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!userId)
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { isActive } = await req.json();
 
   const rider = await prisma.rider.update({
     where: { clerkId: userId },
-    data:  { isActive },
+    data: { isActive },
   });
 
   return NextResponse.json(rider);

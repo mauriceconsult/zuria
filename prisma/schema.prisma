@@ -8,27 +8,25 @@ datasource db {
 }
 
 model Shop {
-  id         String      @id @default(uuid())
-  userId     String
-  name       String
-  country    String      @default("UG")
-  currency   String      @default("UGX")
-  momoPhone  String?
-  phone      String?
-  billboards Billboard[] @relation("ShopToBillboard")
-  categories Category[]  @relation("ShopToCategory")
-  sizes      Size[]      @relation("ShopToSize")
-  colors     Color[]     @relation("ShopToColor")
-  products   Product[]   @relation("ShopToProduct")
-  orders     Order[]     @relation("ShopToOrder")
+  id             String          @id @default(uuid())
+  name           String
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  userId         String
+  address        String?
+  latitude       Float?
+  longitude      Float?
+  country        String          @default("UG")
+  currency       String          @default("UGX")
+  momoPhone      String?
+  phone          String?
+  billboards     Billboard[]     @relation("ShopToBillboard")
+  categories     Category[]      @relation("ShopToCategory")
+  colors         Color[]         @relation("ShopToColor")
+  orders         Order[]         @relation("ShopToOrder")
+  products       Product[]       @relation("ShopToProduct")
   refundRequests RefundRequest[] @relation("ShopToRefundRequest")
-
-  latitude  Float?
-  longitude Float?
-  address   String?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  sizes          Size[]          @relation("ShopToSize")
 
   @@index([userId])
 }
@@ -36,27 +34,33 @@ model Shop {
 model Billboard {
   id         String     @id @default(uuid())
   shopId     String
-  shop       Shop       @relation("ShopToBillboard", fields: [shopId], references: [id])
   label      String
   imageUrl   String
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+  shop       Shop       @relation("ShopToBillboard", fields: [shopId], references: [id])
   categories Category[]
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
   @@index([shopId])
+}
+enum VehicleType {
+  motorcycle
+  bicycle
+  car
+  // van
+  // truck
 }
 
 model Category {
   id          String    @id @default(uuid())
-  products    Product[] @relation("CategoryToProduct")
   shopId      String
-  shop        Shop      @relation("ShopToCategory", fields: [shopId], references: [id])
   billboardId String
-  billboard   Billboard @relation(fields: [billboardId], references: [id])
   name        String
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
+  billboard   Billboard @relation(fields: [billboardId], references: [id])
+  shop        Shop      @relation("ShopToCategory", fields: [shopId], references: [id])
+  products    Product[] @relation("CategoryToProduct")
 
   @@index([shopId])
   @@index([billboardId])
@@ -65,26 +69,25 @@ model Category {
 model Size {
   id        String    @id @default(uuid())
   shopId    String
-  shop      Shop      @relation("ShopToSize", fields: [shopId], references: [id])
-  products  Product[]
   name      String
-  value     String
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
+  value     String
+  products  Product[]
+  shop      Shop      @relation("ShopToSize", fields: [shopId], references: [id])
 
   @@index([shopId])
 }
 
 model Color {
-  id     String @id @default(uuid())
-  shopId String
-  shop   Shop   @relation("ShopToColor", fields: [shopId], references: [id])
-
+  id        String    @id @default(uuid())
+  shopId    String
   name      String
   value     String
-  products  Product[]
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
+  shop      Shop      @relation("ShopToColor", fields: [shopId], references: [id])
+  products  Product[]
 
   @@index([shopId])
 }
@@ -92,21 +95,21 @@ model Color {
 model Product {
   id         String      @id @default(uuid())
   shopId     String
-  shop       Shop        @relation("ShopToProduct", fields: [shopId], references: [id])
   categoryId String
-  category   Category    @relation("CategoryToProduct", fields: [categoryId], references: [id])
   name       String
   price      Decimal
   isFeatured Boolean     @default(false)
   isArchived Boolean     @default(false)
   sizeId     String
-  size       Size        @relation(fields: [sizeId], references: [id])
   colorId    String
-  color      Color       @relation(fields: [colorId], references: [id])
-  images     Image[]
-  orderItems OrderItem[]
   createdAt  DateTime    @default(now())
   updatedAt  DateTime    @updatedAt
+  images     Image[]
+  orderItems OrderItem[]
+  category   Category    @relation("CategoryToProduct", fields: [categoryId], references: [id])
+  color      Color       @relation(fields: [colorId], references: [id])
+  shop       Shop        @relation("ShopToProduct", fields: [shopId], references: [id])
+  size       Size        @relation(fields: [sizeId], references: [id])
 
   @@index([shopId])
   @@index([categoryId])
@@ -117,92 +120,63 @@ model Product {
 model Image {
   id        String   @id @default(uuid())
   productId String
-  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
   url       String
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
 
   @@index([productId])
 }
 
 model Order {
-  id         String      @id @default(uuid())
-  shopId     String
-  shop       Shop        @relation("ShopToOrder", fields: [shopId], references: [id])
-  orderItems OrderItem[]
-  jobs       DeliveryJob[]
-  disbursements Disbursement[]              // ← add this line
-  isPaid     Boolean     @default(false)
-  phone      String      @default("")
-  address    String      @default("")
-
-  platformFee Decimal?
-  shopPayout  Decimal?
-
-  shopPayoutStatus  String  @default("not_applicable")  // ← add this line
-  riderPayoutStatus String  @default("not_applicable")  // ← add this line
-
-  deliveredAt     DateTime?
-  refundRequest   RefundRequest?
-  deliveryLat         Float?
-  deliveryLng         Float?
-
-  paymentMethod String  @default("stripe")
-  paymentRef    String?
-  paymentStatus String  @default("pending")
-
-  deliveryMethod      String?
-  deliveryQuoteId     String?
-  deliveryStatus      String   @default("pending")
-  deliveryRef         String?
+  id                  String         @id @default(uuid())
+  shopId              String
+  isPaid              Boolean        @default(false)
+  phone               String         @default("")
+  address             String         @default("")
+  createdAt           DateTime       @default(now())
+  updatedAt           DateTime       @updatedAt
   deliveryCost        Decimal?
+  deliveryMethod      String?
+  deliveryRef         String?
+  deliveryStatus      String         @default("pending")
+  paymentMethod       String         @default("stripe")
+  paymentRef          String?
+  paymentStatus       String         @default("pending")
+  platformFee         Decimal?
+  shopPayout          Decimal?
   deliveryProvider    String?
   deliveryTrackingUrl String?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  deliveryQuoteId     String?
+  deliveredAt         DateTime?
+  deliveryLat         Float?
+  deliveryLng         Float?
+  jobs                DeliveryJob?
+  shop                Shop           @relation("ShopToOrder", fields: [shopId], references: [id])
+  orderItems          OrderItem[]
+  refundRequest       RefundRequest?
 
   @@index([shopId])
 }
-model Disbursement {
-  id                String   @id @default(uuid())
-  orderId           String
-  order             Order    @relation(fields: [orderId], references: [id])
-  recipientType     String   // "shop" | "rider"
-  phone             String
-  amount            Decimal
-  currency          String   @default("UGX")
-  momoReferenceId   String   @unique
-  momoStatus        String   @default("PROCESSING") // PROCESSING | SUCCESSFUL | FAILED
-  momoTransactionId String?
-  paidAt            DateTime?
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([orderId])
-  @@index([momoReferenceId])
-  @@index([momoStatus])
-}
 model RefundRequest {
-  id              String   @id @default(uuid())
-  orderId         String   @unique
-  order           Order    @relation(fields: [orderId], references: [id])
-  shopId          String
-  shop            Shop     @relation("ShopToRefundRequest", fields: [shopId], references: [id])
-  buyerPhone      String
-  buyerEmail      String?
-  reason          String
-  evidence        String[] // Cloudinary image URLs
-  status          String   @default("pending")
-  // pending → under_review → approved → rejected → refunded
-  sellerResponse  String?
-  adminNotes      String?
-  requestedAt     DateTime @default(now())
-  resolvedAt      DateTime?
-  refundedAt      DateTime?
-  expiresAt       DateTime // requestedAt + 48 hours
-  
+  id             String    @id @default(uuid())
+  orderId        String    @unique
+  shopId         String
+  buyerPhone     String
+  buyerEmail     String?
+  reason         String
+  evidence       String[]
+  status         String    @default("pending")
+  sellerResponse String?
+  adminNotes     String?
+  requestedAt    DateTime  @default(now())
+  resolvedAt     DateTime?
+  refundedAt     DateTime?
+  expiresAt      DateTime
+  order          Order     @relation(fields: [orderId], references: [id])
+  shop           Shop      @relation("ShopToRefundRequest", fields: [shopId], references: [id])
+
   @@index([shopId])
   @@index([status])
 }
@@ -210,78 +184,48 @@ model RefundRequest {
 model OrderItem {
   id        String  @id @default(uuid())
   orderId   String
-  order     Order   @relation(fields: [orderId], references: [id])
   productId String
+  order     Order   @relation(fields: [orderId], references: [id])
   product   Product @relation(fields: [productId], references: [id])
 
   @@index([orderId])
   @@index([productId])
 }
 
-// ── New: VehicleType enum ─────────────────────────────────────────────────────
-// Enforced at the database level — matches the three tiers priced in
-// lib/delivery/providers/custom.ts. Postgres will reject any value
-// outside this set at insert/update time.
-
-enum VehicleType {
-  bicycle
-  motorcycle
-  car
-}
-
-// ── Updated: Rider model ──────────────────────────────────────────────────────
-
 model Rider {
-  id           String        @id @default(uuid())
-  clerkId      String        @unique
-  name         String
-  phone        String
-  email        String
-  vehicleType  VehicleType   @default(motorcycle)   // ← was String @default("motorcycle")
+  id          String         @id @default(uuid())
+  clerkId     String         @unique
+  name        String
+  phone       String
+  email       String
 
-  isApproved   Boolean       @default(false)
-  approvedBy   String?
-  approvedById String?
-  approvedAt   DateTime?
+  vehicleType VehicleType    @default(motorcycle)
 
-  isActive     Boolean       @default(false)
+  isActive    Boolean        @default(true)
+  rating      Float          @default(5.0)
+  totalJobs   Int            @default(0)
 
-  rating       Float         @default(5.0)
-  totalJobs    Int           @default(0)
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
 
-  jobs         DeliveryJob[]
-
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
-
-  @@index([isApproved])
-  @@index([approvedBy])
+  jobs        DeliveryJob[]
 }
-
-// ── Updated: DeliveryJob model ────────────────────────────────────────────────
 
 model DeliveryJob {
-  id           String        @id @default(uuid())
-  orderId      String        @unique
-  order        Order         @relation(fields: [orderId], references: [id])
-  shopId       String?
+  id           String    @id @default(uuid())
+  orderId      String    @unique
   riderId      String?
-  rider        Rider?        @relation(fields: [riderId], references: [id])
-  status       String        @default("pending")
-  deliveryCost Float         @default(0)
-  vehicleType  VehicleType?                         // ← was String?, now nullable enum
+  status       String    @default("pending")
+  deliveryCost Float     @default(0)
   lastLat      Float?
   lastLng      Float?
   acceptedAt   DateTime?
   deliveredAt  DateTime?
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  order        Order     @relation(fields: [orderId], references: [id])
+  rider        Rider?    @relation(fields: [riderId], references: [id])
 
   @@index([status])
   @@index([riderId])
-  @@index([shopId])
 }
-
-
-
-
