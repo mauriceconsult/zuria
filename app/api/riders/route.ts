@@ -1,51 +1,97 @@
 // app/api/riders/route.ts  (Zuria)
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { VehicleType } from "@prisma/client";
+
+const VALID_VEHICLE_TYPES = Object.values(VehicleType);
 
 export async function POST(req: NextRequest) {
-  console.log("=== /api/riders called ===");
+  try {
+    // ── Auth ──────────────────────────────────────────────────────────────
+    const apiKey = req.headers.get("x-api-key");
 
-  const apiKey = req.headers.get("x-api-key");
+    if (!process.env.PLATFORM_API_KEY) {
+      console.error("[/api/riders] PLATFORM_API_KEY is not set on this server");
+      return NextResponse.json(
+        { error: "Server misconfigured" },
+        { status: 500 }
+      );
+    }
 
-  console.log({
-    hasApiKey: !!apiKey,
-    receivedApiKeyPrefix: apiKey?.substring(0, 8),
-    expectedApiKeyPrefix: process.env.PLATFORM_API_KEY?.substring(0, 8),
-    matches: apiKey === process.env.PLATFORM_API_KEY,
-  });
+    if (apiKey !== process.env.PLATFORM_API_KEY) {
+      console.warn("[/api/riders] Invalid API key", {
+        receivedPrefix: apiKey?.substring(0, 8) ?? "none",
+      });
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
 
-  const body = await req.json();
+    // ── Parse body ────────────────────────────────────────────────────────
+    const body = await req.json().catch(() => null);
 
-  console.log("BODY:", body);
+    if (!body) {
+      return NextResponse.json(
+        { error: "Invalid request body" },
+        { status: 400 }
+      );
+    }
 
-  const { clerkId, name, phone, email, vehicleType } = body;
+    const { clerkId, name, phone, email, vehicleType } = body as {
+      clerkId?:    string;
+      name?:       string;
+      phone?:      string;
+      email?:      string;
+      vehicleType?: string;
+    };
 
-  // validate fields...
-  console.log("About to upsert rider:", {
-    clerkId,
-    name,
-    phone,
-    email,
-    vehicleType,
-  });
+    // ── Validate ──────────────────────────────────────────────────────────
+    if (!clerkId || !name || !phone || !vehicleType) {
+      return NextResponse.json(
+        { error: "Missing required fields: clerkId, name, phone, vehicleType" },
+        { status: 400 }
+      );
+    }
 
-  const rider = await prisma.rider.upsert({
-    where: { clerkId },
-    update: {
-      name,
-      phone,
-      email,
-      vehicleType,
-    },
-    create: {
-      clerkId,
-      name,
-      phone,
-      email,
-      vehicleType,
-    },
-  });
-  console.log("Rider upsert successful:", rider);
+    // Validate against the DB enum — catches the motorcycle/bicycl/car typo
+    // class of error before it hits Postgres
+    if (!VALID_VEHICLE_TYPES.includes(vehicleType as VehicleType)) {
+      return NextResponse.json(
+        {
+          error: `Invalid vehicleType "${vehicleType}". Must be one of: ${VALID_VEHICLE_TYPES.join(", ")}`,
+        },
+        { status: 400 }
+      );
+    }
 
-  return NextResponse.json(rider, { status: 200 });
+    // ── Upsert ────────────────────────────────────────────────────────────
+    const rider = await prisma.rider.upsert({
+      where:  { clerkId },
+      update: { name, phone, email: email ?? "", vehicleType: vehicleType as VehicleType },
+      create: { clerkId, name, phone, email: email ?? "", vehicleType: vehicleType as VehicleType },
+    });
+
+    console.log("[/api/riders] Rider upserted:", rider.id);
+    return NextResponse.json(rider, { status: 200 });
+
+  } catch (error: unknown) {
+    // Log the full error server-side so Vercel logs show exactly what went wrong
+    console.error("[/api/riders] Unhandled error:", {
+      message: error instanceof Error ? error.message : String(error),
+      code:    (error as any)?.code,   // P2002 = unique, P2003 = foreign key
+      meta:    (error as any)?.meta,
+    });
+
+    // P2002 = unique constraint — clerkId already exists but upsert should
+    // handle this; if we reach here via P2002 something else is wrong
+    if ((error as any)?.code === "P2002") {
+      return NextResponse.json(
+        { error: "Rider already registered" },
+        { status: 409 }
+      );
+    }
+
+    return NextResponse.json(
+      { error: "Registration failed — please try again" },
+      { status: 500 }
+    );
+  }
 }
