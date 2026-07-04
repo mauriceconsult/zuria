@@ -1,19 +1,26 @@
 // app/dukaboda/admin/page.tsx  (Zuria)
-// Platform admin dashboard — approve/reject wildcard riders
-// Protected: only PLATFORM_ADMIN_CLERK_IDS can access
+// Platform admin dashboard — approve/suspend/revoke wildcard riders.
+// Protected: only PLATFORM_ADMIN_CLERK_IDS can access.
 
 import { auth } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
-import { AdminRiderList } from "./_components/admin-rider-list";
+import { VehicleType } from "@prisma/client";
+import { AdminRiderCard } from "./_components/admin-rider-card";
+// import { AdminRiderCard } from "./_components/admin-rider-card";
 
-const PLATFORM_ADMINS = (process.env.PLATFORM_ADMIN_CLERK_IDS ?? "").split(",").filter(Boolean);
+const PLATFORM_ADMINS = (process.env.PLATFORM_ADMIN_CLERK_IDS ?? "")
+  .split(",")
+  .filter(Boolean);
 
-const VEHICLE_EMOJI: Record<string, string> = {
+// Exhaustive against the VehicleType enum — no fallback needed.
+const VEHICLE_EMOJI: Record<VehicleType, string> = {
   motorcycle: "🏍️",
-  bicycle:    "🚲",
-  car:        "🚗",
+  bicycle: "🚲",
+  car: "🚗",
 };
+
+const PAGE_SIZE = 50;
 
 export default async function DukabodaAdminPage() {
   const { userId } = await auth();
@@ -21,168 +28,262 @@ export default async function DukabodaAdminPage() {
     redirect("/dukaboda");
   }
 
-  const [pending, shopLinked, platformLinked] = await Promise.all([
-    // Unapproved applications
-    prisma.rider.findMany({
-      where:   { isApproved: false },
-      orderBy: { createdAt: "desc" },
-    }),
-    // Shop-approved riders
-    prisma.rider.findMany({
-      where:   { isApproved: true, approvedBy: "shop" },
-      orderBy: { createdAt: "desc" },
-      include: { _count: { select: { jobs: true } } },
-    }),
-    // Platform-approved (wildcard) riders
-    prisma.rider.findMany({
-      where:   { isApproved: true, approvedBy: "platform" },
-      orderBy: { createdAt: "desc" },
-      include: { _count: { select: { jobs: true } } },
-    }),
-  ]);
+  let pending: Awaited<ReturnType<typeof fetchPending>> = [];
+  let shopLinked: Awaited<ReturnType<typeof fetchShopLinked>> = [];
+  let platformLinked: Awaited<ReturnType<typeof fetchPlatformLinked>> = [];
+
+  try {
+    [pending, shopLinked, platformLinked] = await Promise.all([
+      fetchPending(),
+      fetchShopLinked(),
+      fetchPlatformLinked(),
+    ]);
+  } catch (err) {
+    console.error("[DukabodaAdmin] DB fetch failed:", err);
+    return (
+      <main className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <p className="text-2xl mb-2">⚠️</p>
+          <p className="text-sm text-gray-500">
+            Unable to load rider data. Please try again.
+          </p>
+        </div>
+      </main>
+    );
+  }
 
   const totalActive = shopLinked.length + platformLinked.length;
 
   return (
     <main className="min-h-screen bg-gray-50">
-
-      {/* Header */}
-      <div className="bg-white border-b border-gray-100 px-6 py-5">
+      {/* ── Header ────────────────────────────────────────────────────── */}
+      <div className="bg-white border-b border-gray-100 px-6 py-5 sticky top-0 z-10">
         <div className="max-w-5xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-3">
             <span className="text-2xl">🛵</span>
             <div>
-              <h1 className="text-xl font-bold text-gray-900">Dukaboda Admin</h1>
+              <h1 className="text-xl font-bold text-gray-900">
+                Dukaboda Admin
+              </h1>
               <p className="text-xs text-gray-400">Platform rider management</p>
             </div>
           </div>
-          <div className="flex gap-4 text-center">
+
+          {/* Live counters */}
+          <div className="flex gap-6 text-center">
             <div>
-              <p className="text-lg font-bold text-yellow-500">{pending.length}</p>
+              <p className="text-xl font-bold text-yellow-500">
+                {pending.length}
+              </p>
               <p className="text-xs text-gray-400">Pending</p>
             </div>
             <div>
-              <p className="text-lg font-bold text-green-500">{totalActive}</p>
+              <p className="text-xl font-bold text-green-500">{totalActive}</p>
               <p className="text-xs text-gray-400">Active</p>
+            </div>
+            <div>
+              <p className="text-xl font-bold text-purple-500">
+                {platformLinked.length}
+              </p>
+              <p className="text-xs text-gray-400">Wildcard</p>
+            </div>
+            <div>
+              <p className="text-xl font-bold text-blue-500">
+                {shopLinked.length}
+              </p>
+              <p className="text-xs text-gray-400">Shop-linked</p>
             </div>
           </div>
         </div>
       </div>
 
-      <div className="max-w-5xl mx-auto px-6 py-8 space-y-10">
-
-        {/* Pending applications */}
+      <div className="max-w-5xl mx-auto px-6 py-8 space-y-12">
+        {/* ── Pending applications ───────────────────────────────────── */}
         <section>
-          <div className="flex items-center gap-2 mb-4">
-            <h2 className="text-base font-semibold text-gray-800">
-              Pending Applications
-            </h2>
-            {pending.length > 0 && (
-              <span className="bg-yellow-100 text-yellow-700 text-xs font-mono px-2 py-0.5 rounded-full">
-                {pending.length}
-              </span>
-            )}
-          </div>
+          <SectionHeader
+            title="Pending Applications"
+            count={pending.length}
+            countStyle="bg-yellow-100 text-yellow-700"
+          />
 
           {pending.length === 0 ? (
-            <div className="bg-white rounded-2xl p-8 text-center text-sm text-gray-400 border border-gray-100">
-              No pending applications
-            </div>
+            <EmptyState message="No pending applications" />
           ) : (
             <div className="space-y-3">
               {pending.map((rider) => (
-                <AdminRiderList
+                <AdminRiderCard
                   key={rider.id}
                   rider={{
-                    ...rider,
-                    vehicleEmoji: VEHICLE_EMOJI[rider.vehicleType] ?? "🚴",
-                    jobCount:     0,
-                    approvedAt:   rider.approvedAt?.toISOString() ?? null,
-                    createdAt:    rider.createdAt.toISOString(),
+                    id: rider.id,
+                    name: rider.name,
+                    phone: rider.phone,
+                    vehicleType: rider.vehicleType,
+                    vehicleEmoji: VEHICLE_EMOJI[rider.vehicleType],
+                    isApproved: rider.isApproved,
+                    isActive: rider.isActive,
+                    rating: rider.rating,
+                    jobCount: 0,
+                    approvedAt: rider.approvedAt?.toISOString() ?? null,
+                    createdAt: rider.createdAt.toISOString(),
                   }}
-                  approvalType="platform"
-                  showFeeNote
+                  variant="pending"
                 />
               ))}
             </div>
           )}
         </section>
 
-        {/* Platform-approved (wildcard) */}
+        {/* ── Platform-approved (wildcard) riders ───────────────────── */}
         <section>
-          <div className="flex items-center gap-2 mb-4">
-            <h2 className="text-base font-semibold text-gray-800">
-              Wildcard Riders
-            </h2>
-            <span className="bg-purple-100 text-purple-700 text-xs font-mono px-2 py-0.5 rounded-full">
-              {platformLinked.length} · 10% delivery fee
-            </span>
-          </div>
+          <SectionHeader
+            title="Wildcard Riders"
+            count={platformLinked.length}
+            countStyle="bg-purple-100 text-purple-700"
+            subtitle="Platform-approved · 10% platform fee per delivery"
+          />
 
           {platformLinked.length === 0 ? (
-            <div className="bg-white rounded-2xl p-8 text-center text-sm text-gray-400 border border-gray-100">
-              No wildcard riders yet
-            </div>
+            <EmptyState message="No wildcard riders yet" />
           ) : (
             <div className="space-y-3">
               {platformLinked.map((rider) => (
-                <AdminRiderList
+                <AdminRiderCard
                   key={rider.id}
                   rider={{
-                    ...rider,
-                    vehicleEmoji: VEHICLE_EMOJI[rider.vehicleType] ?? "🚴",
-                    jobCount:     rider._count.jobs,
-                    approvedAt:   rider.approvedAt?.toISOString() ?? null,
-                    createdAt:    rider.createdAt.toISOString(),
+                    id: rider.id,
+                    name: rider.name,
+                    phone: rider.phone,
+                    vehicleType: rider.vehicleType,
+                    vehicleEmoji: VEHICLE_EMOJI[rider.vehicleType],
+                    isApproved: rider.isApproved,
+                    isActive: rider.isActive,
+                    rating: rider.rating,
+                    jobCount: rider._count.jobs,
+                    approvedAt: rider.approvedAt?.toISOString() ?? null,
+                    createdAt: rider.createdAt.toISOString(),
                   }}
-                  approvalType="platform"
-                  approved
+                  variant="wildcard"
                 />
               ))}
             </div>
           )}
         </section>
 
-        {/* Shop-linked riders (read-only here) */}
+        {/* ── Shop-linked riders (read-only) ─────────────────────────── */}
         <section>
-          <div className="flex items-center gap-2 mb-4">
-            <h2 className="text-base font-semibold text-gray-800">
-              Shop-linked Riders
-            </h2>
-            <span className="bg-green-100 text-green-700 text-xs font-mono px-2 py-0.5 rounded-full">
-              {shopLinked.length} · 0% delivery fee
-            </span>
-          </div>
+          <SectionHeader
+            title="Shop-linked Riders"
+            count={shopLinked.length}
+            countStyle="bg-green-100 text-green-700"
+            subtitle="Shop-approved · 0% platform fee"
+          />
+
+          <p className="text-xs text-gray-400 mb-4">
+            Managed by their respective Vendly shops. Contact the shop owner to
+            approve, suspend, or remove a shop-linked rider. The platform cannot
+            modify shop-linked rider status directly.
+          </p>
 
           {shopLinked.length === 0 ? (
-            <div className="bg-white rounded-2xl p-8 text-center text-sm text-gray-400 border border-gray-100">
-              No shop-linked riders yet
-            </div>
+            <EmptyState message="No shop-linked riders yet" />
           ) : (
             <div className="space-y-3">
               {shopLinked.map((rider) => (
-                <div
+                <AdminRiderCard
                   key={rider.id}
-                  className="flex items-center justify-between bg-white rounded-xl px-5 py-4 border border-gray-100"
-                >
-                  <div className="flex items-center gap-3">
-                    <span className="text-2xl">{VEHICLE_EMOJI[rider.vehicleType] ?? "🚴"}</span>
-                    <div>
-                      <p className="text-sm font-semibold text-gray-900">{rider.name}</p>
-                      <p className="text-xs text-gray-400">{rider.phone}</p>
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-sm font-semibold text-gray-800">{rider._count.jobs} jobs</p>
-                    <p className="text-xs text-gray-400">Shop approved</p>
-                  </div>
-                </div>
+                  rider={{
+                    id: rider.id,
+                    name: rider.name,
+                    phone: rider.phone,
+                    vehicleType: rider.vehicleType,
+                    vehicleEmoji: VEHICLE_EMOJI[rider.vehicleType],
+                    isApproved: rider.isApproved,
+                    isActive: rider.isActive,
+                    rating: rider.rating,
+                    jobCount: rider._count.jobs,
+                    approvedAt: rider.approvedAt?.toISOString() ?? null,
+                    createdAt: rider.createdAt.toISOString(),
+                  }}
+                  variant="shop"
+                />
               ))}
             </div>
           )}
-        </section>
 
+          {shopLinked.length === PAGE_SIZE && (
+            <p className="text-xs text-gray-400 text-center mt-4">
+              Showing first {PAGE_SIZE} riders. Use the database dashboard for
+              full export.
+            </p>
+          )}
+        </section>
       </div>
     </main>
+  );
+}
+
+// ─── Data fetchers ────────────────────────────────────────────────────────────
+
+function fetchPending() {
+  return prisma.rider.findMany({
+    where: { isApproved: false },
+    orderBy: { createdAt: "desc" },
+    take: PAGE_SIZE,
+  });
+}
+
+function fetchShopLinked() {
+  return prisma.rider.findMany({
+    where: { isApproved: true, approvedBy: "shop" },
+    orderBy: { createdAt: "desc" },
+    take: PAGE_SIZE,
+    include: { _count: { select: { jobs: true } } },
+  });
+}
+
+function fetchPlatformLinked() {
+  return prisma.rider.findMany({
+    where: { isApproved: true, approvedBy: "platform" },
+    orderBy: { createdAt: "desc" },
+    take: PAGE_SIZE,
+    include: { _count: { select: { jobs: true } } },
+  });
+}
+
+// ─── Shared sub-components ────────────────────────────────────────────────────
+
+function SectionHeader({
+  title,
+  count,
+  countStyle,
+  subtitle,
+}: {
+  title: string;
+  count: number;
+  countStyle: string;
+  subtitle?: string;
+}) {
+  return (
+    <div className="flex items-start justify-between mb-4">
+      <div>
+        <div className="flex items-center gap-2">
+          <h2 className="text-base font-semibold text-gray-800">{title}</h2>
+          <span
+            className={`text-xs font-mono px-2 py-0.5 rounded-full ${countStyle}`}
+          >
+            {count}
+          </span>
+        </div>
+        {subtitle && <p className="text-xs text-gray-400 mt-0.5">{subtitle}</p>}
+      </div>
+    </div>
+  );
+}
+
+function EmptyState({ message }: { message: string }) {
+  return (
+    <div className="bg-white rounded-2xl p-8 text-center text-sm text-gray-400 border border-gray-100">
+      {message}
+    </div>
   );
 }
