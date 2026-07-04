@@ -178,6 +178,7 @@ model Disbursement {
   orderId         String
   order           Order    @relation(fields: [orderId], references: [id])
 
+  provider String @default("mtn-momo")
   recipientType   String   // "shop" | "rider"
 
   phone           String
