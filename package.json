@@ -9,6 +9,7 @@
     "start": "next start"
   },
   "dependencies": {
+    "@clerk/backend": "^3.22.0",
     "@clerk/nextjs": "^6.37.4",
     "@expo/vector-icons": "^15.0.2",
     "@hookform/resolvers": "^5.2.2",
