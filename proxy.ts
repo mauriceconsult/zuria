@@ -7,6 +7,7 @@ const isPublicRoute = createRouteMatcher([
   "/sign-up(.*)",
   "/api/webhook(.*)",
   "/api/shops",
+  "/api/platform/shops(.*)",
   "/api/riders(.*)", // Dukaboda cross-app rider registration
   "/api/delivery/jobs(.*)", // Dukaboda job polling
   "/api/admin/riders(.*)", // Platform admin rider approval
