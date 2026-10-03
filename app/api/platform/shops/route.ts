@@ -28,8 +28,8 @@ export async function POST(req: Request) {
 
     const shop = await prisma.shop.create({ data: { name, userId } });
     return NextResponse.json(shop);
-  } catch (error) {
-    console.error("[PLATFORM_SHOPS_POST]", error);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+   } catch (error) {
+     console.error("[PLATFORM_SHOPS_POST]", error);
+     return NextResponse.json({ error: "Internal error" }, { status: 500 });
   }
 }

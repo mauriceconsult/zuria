@@ -1,4 +1,5 @@
-import { getShopForUser, requirePlatformUser } from "@/lib/platform-auth";
+// app/api/platform/shops/[shopId]/categories/route.ts
+import { requirePlatformUser, getShopForUser } from "@/lib/platform-auth";
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
 
@@ -15,8 +16,8 @@ export async function GET(
   if (!shop)
     return NextResponse.json({ error: "Shop not found" }, { status: 404 });
 
-  const products = await prisma.product.findMany({ where: { shopId } });
-  return NextResponse.json(products);
+  const categories = await prisma.category.findMany({ where: { shopId } });
+  return NextResponse.json(categories);
 }
 
 export async function POST(
@@ -33,49 +34,22 @@ export async function POST(
     if (!shop)
       return NextResponse.json({ error: "Shop not found" }, { status: 404 });
 
-    const {
-      name,
-      price,
-      categoryId,
-      colorId,
-      sizeId,
-      images,
-      isFeatured,
-      isArchived,
-    } = await req.json();
+    // POST body
+    const { name, billboardId } = await req.json();
     if (!name)
       return NextResponse.json({ error: "name is required" }, { status: 400 });
-    if (price === undefined || price === null)
-      return NextResponse.json({ error: "price is required" }, { status: 400 });
-    if (!categoryId || !colorId || !sizeId)
+    if (!billboardId)
       return NextResponse.json(
-        { error: "categoryId, colorId, and sizeId are required" },
-        { status: 400 },
-      );
-    if (!images?.length)
-      return NextResponse.json(
-        { error: "images are required" },
+        { error: "billboardId is required" },
         { status: 400 },
       );
 
-    const product = await prisma.product.create({
-      data: {
-        name,
-        price,
-        categoryId,
-        colorId,
-        sizeId,
-        shopId,
-        isFeatured,
-        isArchived,
-        images: {
-          createMany: { data: images.map((image: { url: string }) => image) },
-        },
-      },
+    const category = await prisma.category.create({
+      data: { name, billboardId, shopId },
     });
-    return NextResponse.json(product);
+    return NextResponse.json(category);
   } catch (error) {
-    console.error("[PLATFORM_PRODUCTS_POST]", error);
+    console.error("[PLATFORM_CATEGORIES_POST]", error);
     return NextResponse.json({ error: "Internal error" }, { status: 500 });
   }
 }
