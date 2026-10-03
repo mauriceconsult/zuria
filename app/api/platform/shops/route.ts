@@ -21,23 +21,15 @@ export async function POST(req: Request) {
     if (!name)
       return NextResponse.json({ error: "name is required" }, { status: 400 });
 
-   try {
-     const shop = await prisma.shop.create({ data: { name, userId } });
-     return NextResponse.json(shop);
-   } catch (error) {
-     console.error("[PLATFORM_SHOPS_POST]", error);
-     return NextResponse.json(
-       {
-         error: "Internal error",
-         detail: error instanceof Error ? error.message : String(error),
-       },
-       { status: 500 },
-     );
-   }
+    const shop = await prisma.shop.create({ data: { name, userId } });
+    return NextResponse.json(shop);
   } catch (error) {
-    console.error("[platform/shops] POST failed", error);
+    console.error("[PLATFORM_SHOPS_POST]", error);
     return NextResponse.json(
-      { error: "Failed to create shop" },
+      {
+        error: "Internal error",
+        detail: error instanceof Error ? error.message : String(error),
+      },
       { status: 500 },
     );
   }
