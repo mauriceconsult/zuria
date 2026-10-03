@@ -10,10 +10,16 @@ const clerkClient = createClerkClient({
 export async function requirePlatformUser(
   req: Request,
 ): Promise<string | null> {
+  const publishableKey = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
+  if (!publishableKey) {
+    throw new Error("NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY is not configured");
+  }
+
   const { isAuthenticated, toAuth } = await clerkClient.authenticateRequest(
     req,
     {
       acceptsToken: "oauth_token",
+      publishableKey,
     },
   );
   if (!isAuthenticated) return null;

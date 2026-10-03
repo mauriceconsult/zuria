@@ -3,12 +3,17 @@ import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
 
 export async function GET(req: Request) {
-  const userId = await requirePlatformUser(req);
-  if (!userId)
-    return NextResponse.json({ error: "Invalid token" }, { status: 401 });
+  try {
+    const userId = await requirePlatformUser(req);
+    if (!userId)
+      return NextResponse.json({ error: "Invalid token" }, { status: 401 });
 
-  const shops = await prisma.shop.findMany({ where: { userId } });
-  return NextResponse.json(shops);
+    const shops = await prisma.shop.findMany({ where: { userId } });
+    return NextResponse.json(shops);
+  } catch (error) {
+    console.error("[PLATFORM_SHOPS_GET]", error);
+    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+  }
 }
 
 export async function POST(req: Request) {
@@ -25,12 +30,6 @@ export async function POST(req: Request) {
     return NextResponse.json(shop);
   } catch (error) {
     console.error("[PLATFORM_SHOPS_POST]", error);
-    return NextResponse.json(
-      {
-        error: "Internal error",
-        detail: error instanceof Error ? error.message : String(error),
-      },
-      { status: 500 },
-    );
+    return NextResponse.json({ error: "Internal error" }, { status: 500 });
   }
 }
