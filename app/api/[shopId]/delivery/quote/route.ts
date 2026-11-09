@@ -7,6 +7,7 @@ import { getDeliveryProvider } from "@/lib/delivery/registry";
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { geocodeAddress } from "@/lib/delivery/geo-code";
+import { signDeliveryQuote } from "@/lib/delivery/quote-token";
 
 export async function POST(
   req: NextRequest,
@@ -66,13 +67,33 @@ export async function POST(
     // ── Convert cost to shop currency if needed ────────────────────────────
     // If provider returns UGX and shop uses UGX, no conversion needed.
     // Add FX conversion here when supporting multi-currency shops.
-    const cost = quote.currency === shop.currency ? quote.cost : quote.cost; // placeholder — add FX rate lookup here
+    if (quote.currency.toUpperCase() !== shop.currency.toUpperCase()) {
+      return NextResponse.json(
+        { error: "The delivery provider does not support this shop's currency." },
+        { status: 422 },
+      );
+    }
+    const cost = Math.round(quote.cost);
+    if (!Number.isSafeInteger(cost) || cost < 0) {
+      throw new Error("Delivery provider returned an invalid quote amount");
+    }
+
+    const quoteId = signDeliveryQuote({
+      shopId,
+      provider: quote.provider,
+      providerQuoteId: quote.quoteId,
+      cost,
+      currency: shop.currency,
+      expiresAt: quote.expiresAt,
+      address,
+      destination: { lat: destination.lat, lng: destination.lng },
+    });
 
     return NextResponse.json({
-      quoteId: quote.quoteId,
+      quoteId,
       provider: quote.provider,
       cost,
-      currency: shop.currency ?? quote.currency,
+      currency: shop.currency,
       estimatedMinutes: quote.estimatedMinutes,
       expiresAt: quote.expiresAt,
       destination: { lat: destination.lat, lng: destination.lng }, // return resolved coords for UI

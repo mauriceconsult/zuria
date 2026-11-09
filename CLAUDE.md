@@ -40,14 +40,21 @@ bunx prisma db push              # push schema without migration file (dev only)
 
 ```
 Customer checkout
-  → POST /api/[shopId]/checkout/momo   (creates Order, calls RequestToPay)
-  → referenceId prefix: ORD-{orderId}
-  → MTN webhook → POST /api/webhook/momo
-  → if ORD-: handleZuria() → onPaymentConfirmed()
+  → POST /api/[shopId]/checkout/momo with providerId (mtn-momo or mpesa)
+  → verifies the signed delivery quote and uses its server-signed amount
+  → creates Order + PaymentAttempt; sends MTN RequestToPay or Daraja STK Push
+  → providerRef is MTN X-Reference-Id or Daraja CheckoutRequestID
+  → callbacks/status checks reconcile the PaymentAttempt
+  → onPaymentConfirmed() marks the order paid exactly once
   → Order.isPaid = true, products archived
-  → Promise.allSettled([shopDisburse, riderDisburse])
-  → Disbursement records created for each payout
+  → UGX MTN MoMo shop/rider disbursements continue through Disbursement records
 ```
+
+Daraja callbacks are received at `POST /api/webhook/daraja`; MTN callbacks continue
+at `POST /api/webhook/momo` (which also routes legacy `ORD-` and `DLV-` references).
+Payment collection supports UGX/MTN MoMo and KES/Safaricom M-Pesa. Automated
+disbursements remain MTN MoMo only.
+Delivery quote signing requires `DELIVERY_QUOTE_SECRET` (at least 32 characters).
 
 ### Delivery payment flow
 
@@ -84,6 +91,8 @@ Returns: `{ platformFee, deliveryFee, shopPayout, riderPayout, vendlyTotal }`
 - `Shop` — has momoPhone, currency, latitude, longitude
 - `Order` — paymentRef (ORD- reference), isPaid, paymentStatus, shopPayout,
   shopPayoutStatus, riderPayoutStatus, deliveryCost (Decimal)
+- `PaymentAttempt` — provider, amount/currency snapshot, providerRef, status,
+  receipt, and needsRefund flag for duplicate successful collections
 - `Disbursement` — per-payout record (shop or rider), momoReferenceId @unique,
   momoStatus; this is what webhook handler matches against
 - `DeliveryJob` — orderId @unique, shopId, riderId, vehicleType (VehicleType enum),

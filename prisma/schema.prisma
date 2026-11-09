@@ -169,8 +169,32 @@ model Order {
   orderItems          OrderItem[]
   disbursements Disbursement[]
   refundRequest       RefundRequest?
+    currency        String?   // snapshot of shop.currency at checkout
+  amount          Decimal?  // what the buyer is charged, in whole units
+  paymentAttempts PaymentAttempt[]
 
   @@index([shopId])
+}
+model PaymentAttempt {
+  id            String   @id @default(uuid())
+  orderId       String
+  order         Order    @relation(fields: [orderId], references: [id])
+
+  provider      String   // "mtn-momo" | "mpesa", matching your Disbursement.provider convention
+  providerRef   String?  @unique   // CheckoutRequestID for M-Pesa, set after the push succeeds
+  amount        Decimal
+  currency      String
+  phoneLast4    String?  // keep the full number out of this table
+  status        String   @default("PENDING") // PENDING | COMPLETED | FAILED
+  receipt       String?
+  failureReason String?
+  needsRefund   Boolean  @default(false)     // paid after the order was already paid
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([orderId])
+  @@index([status])
 }
 model Disbursement {
   id              String   @id @default(uuid())

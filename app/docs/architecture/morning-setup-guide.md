@@ -244,6 +244,23 @@ NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=""
 STRIPE_SECRET_KEY=""
 STRIPE_WEBHOOK_SECRET=""
 
+# MTN MoMo Collections
+MOMO_TARGET_ENVIRONMENT=""
+MOMO_PRIMARY_KEY=""
+MOMOUSER_ID=""
+MOMOUSER_SECRET=""
+
+# Safaricom Daraja STK Push (use the sandbox base URL while testing)
+DARAJA_BASE_URL="https://sandbox.safaricom.co.ke"
+DARAJA_CONSUMER_KEY=""
+DARAJA_CONSUMER_SECRET=""
+DARAJA_SHORTCODE=""
+DARAJA_PASSKEY=""
+DARAJA_CALLBACK_URL="https://your-domain/api/webhook/daraja"
+
+# Delivery quote signing (at least 32 random characters)
+DELIVERY_QUOTE_SECRET=""
+
 # ============================================
 # EMAILS (Setup later in Phase 6)
 # ============================================

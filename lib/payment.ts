@@ -12,7 +12,12 @@ type OrderWithRelations = Prisma.OrderGetPayload<{
   };
 }>;
 
-export async function onPaymentConfirmed(orderId: string): Promise<void> {
+class ProductsUnavailableError extends Error {}
+
+export async function onPaymentConfirmed(
+  orderId: string,
+  payment?: { paymentMethod: string; paymentRef: string },
+): Promise<boolean> {
   // ── 1. Fetch order ─────────────────────────────────────────────────────────
   const order = await prisma.order.findUnique({
     where: { id: orderId },
@@ -24,11 +29,11 @@ export async function onPaymentConfirmed(orderId: string): Promise<void> {
 
   if (!order) {
     console.error(`[onPaymentConfirmed] Order not found: ${orderId}`);
-    return;
+    return false;
   }
   if (order.isPaid) {
     console.log(`[onPaymentConfirmed] Order ${orderId} already processed.`);
-    return;
+    return false;
   }
 
   // ── 2. Find assigned rider (if delivery job exists) ────────────────────────
@@ -63,35 +68,74 @@ export async function onPaymentConfirmed(orderId: string): Promise<void> {
 
   // ── 4. Mark order paid + archive products atomically ────────────────────────
   const productIds = order.orderItems.map((item) => item.productId);
+  const uniqueProductIds = [...new Set(productIds)];
 
-  await prisma.$transaction([
-    prisma.order.update({
-      where: { id: orderId },
-      data: {
-        isPaid: true,
-        paymentStatus: "completed", // matches schema's documented enum-by-convention
-        shopPayout,
-        platformFee,
-        shopPayoutStatus: order.shop.momoPhone ? "pending" : "not_applicable",
-        riderPayoutStatus: riderPayout > 0 ? "pending" : "not_applicable",
-      },
-    }),
-    prisma.product.updateMany({
-      where: { id: { in: productIds } },
-      data: { isArchived: true },
-    }),
-  ]);
+  const paymentMethod = payment?.paymentMethod ?? order.paymentMethod;
+  const paymentCurrency = order.currency ?? "UGX";
+  const manualPayout = paymentCurrency !== "UGX";
+  let confirmed: boolean;
+  try {
+    confirmed = await prisma.$transaction(async (transaction) => {
+      const claimed = await transaction.order.updateMany({
+        where: { id: orderId, isPaid: false },
+        data: {
+          isPaid: true,
+          paymentStatus: "completed",
+          shopPayout,
+          platformFee,
+          paymentMethod,
+          paymentRef: payment?.paymentRef ?? undefined,
+          shopPayoutStatus: manualPayout
+            ? shopPayout > 0
+              ? "awaiting_manual_payout"
+              : "not_applicable"
+            : order.shop.momoPhone
+              ? "pending"
+              : "not_applicable",
+          riderPayoutStatus: riderPayout <= 0
+            ? "not_applicable"
+            : manualPayout
+              ? "awaiting_manual_payout"
+              : "pending",
+        },
+      });
+      if (claimed.count === 0) return false;
+
+      const archived = await transaction.product.updateMany({
+        where: {
+          id: { in: uniqueProductIds },
+          isArchived: false,
+        },
+        data: { isArchived: true },
+      });
+      if (archived.count !== uniqueProductIds.length) {
+        throw new ProductsUnavailableError("One or more products were already sold");
+      }
+      return true;
+    });
+  } catch (error) {
+    if (error instanceof ProductsUnavailableError) {
+      console.warn(`[PAYMENT] Order ${orderId} contains an already-sold product.`);
+      return false;
+    }
+    throw error;
+  }
+  if (!confirmed) return false;
 
   // ── 5. Disburse to shop + rider in parallel, failure-isolated ──────────────
   const disbursements: Promise<void>[] = [];
 
-  if (order.paymentMethod === "mobile_money" && order.shop.momoPhone) {
+  if (
+    (paymentMethod === "mobile_money" || paymentMethod === "mtn-momo") &&
+    paymentCurrency === "UGX" &&
+    order.shop.momoPhone
+  ) {
     disbursements.push(
       disburseToPhone({
         recipientType: "shop",
         phone: order.shop.momoPhone,
         amount: shopPayout,
-        currency: order.shop.currency,
+        currency: paymentCurrency,
         orderId: order.id,
         note: `Shop payout for order ${order.id}`,
       })
@@ -112,13 +156,17 @@ export async function onPaymentConfirmed(orderId: string): Promise<void> {
     );
   }
 
-  if (deliveryJob?.rider?.phone && riderPayout > 0) {
+  if (
+    paymentCurrency === "UGX" &&
+    deliveryJob?.rider?.phone &&
+    riderPayout > 0
+  ) {
     disbursements.push(
       disburseToPhone({
         recipientType: "rider",
         phone: deliveryJob.rider.phone,
         amount: riderPayout,
-        currency: order.shop.currency,
+        currency: paymentCurrency,
         orderId: order.id,
         note: `Dukaboda delivery payout — order ${order.id}${
           deliveryFee > 0 ? ` (platform fee UGX ${deliveryFee} deducted)` : ""
@@ -172,6 +220,7 @@ export async function onPaymentConfirmed(orderId: string): Promise<void> {
       vehicleType: deliveryJob?.rider?.vehicleType,
     });
   }
+  return true;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

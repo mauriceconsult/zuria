@@ -40,11 +40,13 @@ export async function PATCH(
   });
 
   // If approved — process refund
-  if (status === "approved") {
-    await processRefund(refund);
-  }
+  if (status === "approved") await processRefund(refund);
 
-  return NextResponse.json(refund);
+  const updatedRefund = await prisma.refundRequest.findUniqueOrThrow({
+    where: { id: refund.id },
+    include: { order: true },
+  });
+  return NextResponse.json(updatedRefund);
 }
 
 async function processRefund(refund: {
@@ -55,29 +57,25 @@ async function processRefund(refund: {
     paymentRef: string | null;
     phone: string;
     shopId: string;
+    currency: string | null;
   };
 }) {
-  // Calculate refund deadline (7 business days)
   const refundDeadline = addBusinessDays(new Date(), 7);
-
   await prisma.refundRequest.update({
     where: { id: refund.id },
     data: {
-      status: "refunded",
-      refundedAt: new Date(),
+      status: "awaiting_manual_refund",
+      refundedAt: null,
     },
   });
 
-  // Process via original payment method
-  if (refund.order.paymentMethod === "mobile_money") {
-    // MoMo refund via disbursement
-    // TODO: call momo.disbursements.transfer()
-    console.log(`[REFUND] MoMo refund due by ${refundDeadline}`);
-  } else if (refund.order.paymentMethod === "stripe") {
-    // Stripe refund
-    // TODO: call stripe.refunds.create({ payment_intent: refund.order.paymentRef })
-    console.log(`[REFUND] Stripe refund due by ${refundDeadline}`);
-  }
+  console.info("[REFUND] Approved refund requires manual processing", {
+    refundId: refund.id,
+    orderId: refund.orderId,
+    paymentMethod: refund.order.paymentMethod,
+    currency: refund.order.currency ?? "UGX",
+    dueBy: refundDeadline.toISOString(),
+  });
 }
 
 function addBusinessDays(date: Date, days: number): Date {

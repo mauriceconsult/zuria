@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { handleZuria } from "@/lib/payments/handlers/zuria";
 import { handleDukaboda } from "@/lib/payments/handlers/dukaboda";
+import { reconcileAttempt } from "@/lib/payments/reconcile";
 
 export async function POST(req: Request) {
   const payload = await req.json();
@@ -13,14 +14,23 @@ export async function POST(req: Request) {
     } else if (referenceId.startsWith("DLV-")) {
       await handleDukaboda(payload);
     } else {
-      console.warn("[Zuria webhook] Unrecognised referenceId:", referenceId);
+      const status = await reconcileAttempt(
+        { providerRef: referenceId },
+        payload.financialTransactionId,
+      );
+      if (status === "NOT_FOUND") {
+        console.warn("[Zuria webhook] Unrecognised referenceId:", referenceId);
+      }
     }
   } catch (err) {
     console.error("[Zuria webhook] handler error", {
       referenceId,
       error: err instanceof Error ? err.message : err,
     });
-    // TODO: dead-letter for manual replay
+    return NextResponse.json(
+      { error: "Payment webhook processing failed." },
+      { status: 500 },
+    );
   }
 
   return NextResponse.json({ received: true });
