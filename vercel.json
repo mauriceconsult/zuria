@@ -15,5 +15,11 @@
       "has": [{ "type": "host", "value": "dukaboda.maxnovate.com" }],
       "destination": "/dukaboda/track/:jobId"
     }
+  ],
+  "crons": [
+    {
+      "path": "/api/admin/payouts/run",
+      "schedule": "0 2 * * *"
+    }
   ]
 }

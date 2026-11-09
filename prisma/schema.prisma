@@ -172,6 +172,7 @@ model Order {
     currency        String?   // snapshot of shop.currency at checkout
   amount          Decimal?  // what the buyer is charged, in whole units
   paymentAttempts PaymentAttempt[]
+  payoutOrders    PayoutOrder[]
 
   @@index([shopId])
 }
@@ -314,4 +315,54 @@ model DeliveryJob {
   @@index([status])
   @@index([riderId])
   @@index([vehicleType])
+}
+model Payout {
+  id             String   @id @default(uuid())
+  batchId        String?
+  batch          PayoutBatch? @relation(fields: [batchId], references: [id], onDelete: SetNull)
+  recipientType  String   // "shop" | "rider"
+  recipientId    String
+  phone          String
+  amount         Decimal
+  currency       String
+  provider       String   @default("mpesa")
+
+  status         String   @default("ELIGIBLE") // ELIGIBLE | BATCHED | SENT | PAID | FAILED | UNKNOWN | MANUAL
+  idempotencyKey String   @unique              // e.g. "<recipientId>:<period>"
+  conversationId String?  @unique              // Safaricom's id, set after sending
+  receipt        String?
+  receiverName   String?  // Safaricom returns the registered name: log it
+  failureCode    String?
+  failureReason  String?
+  sentAt         DateTime?
+  paidAt         DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  orders PayoutOrder[]
+  @@index([status])
+  @@index([batchId])
+}
+
+model PayoutOrder {          // which orders a payout covers
+  payoutId      String
+  orderId       String
+  recipientType String
+  amount        Decimal
+  payout        Payout @relation(fields: [payoutId], references: [id], onDelete: Cascade)
+  order         Order  @relation(fields: [orderId], references: [id])
+  @@id([payoutId, orderId])
+  @@unique([orderId, recipientType])   // an order's shop/rider share can be paid once, ever
+  @@index([orderId])
+}
+
+model PayoutBatch {
+  id          String   @id @default(uuid())
+  status      String   @default("DRAFT") // DRAFT | APPROVED | SENDING | DONE | PARTIAL
+  totalAmount Decimal
+  createdBy   String?
+  approvedBy  String?
+  approvedAt  DateTime?
+  createdAt   DateTime @default(now())
+  payouts     Payout[]
 }

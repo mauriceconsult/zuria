@@ -11,6 +11,7 @@ const isPublicRoute = createRouteMatcher([
   "/api/riders(.*)", // Dukaboda cross-app rider registration
   "/api/delivery/jobs(.*)", // Dukaboda job polling
   "/api/admin/riders(.*)", // Platform admin rider approval
+  "/api/admin/payouts/run", // Cron-authenticated payout eligibility job
   "/api/debug(.*)", // Temporary debug endpoint
   "/dukaboda(.*)", // Public landing + tracking pages
 ]);

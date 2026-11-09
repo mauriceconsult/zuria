@@ -71,7 +71,7 @@ export async function onPaymentConfirmed(
   const uniqueProductIds = [...new Set(productIds)];
 
   const paymentMethod = payment?.paymentMethod ?? order.paymentMethod;
-  const paymentCurrency = order.currency ?? "UGX";
+  const paymentCurrency = order.currency ?? order.shop.currency ?? "UGX";
   const manualPayout = paymentCurrency !== "UGX";
   let confirmed: boolean;
   try {
@@ -82,6 +82,7 @@ export async function onPaymentConfirmed(
           isPaid: true,
           paymentStatus: "completed",
           shopPayout,
+          riderPayout,
           platformFee,
           paymentMethod,
           paymentRef: payment?.paymentRef ?? undefined,

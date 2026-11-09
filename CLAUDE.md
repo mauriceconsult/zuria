@@ -56,6 +56,29 @@ Payment collection supports UGX/MTN MoMo and KES/Safaricom M-Pesa. Automated
 disbursements remain MTN MoMo only.
 Delivery quote signing requires `DELIVERY_QUOTE_SECRET` (at least 32 characters).
 
+### M-Pesa payout ledger (manual CSV mode)
+
+- `Payout`/`PayoutOrder` are separate from live MTN `Disbursement` records.
+- `GET /api/admin/payouts/run` is protected by `CRON_SECRET`; Vercel runs it
+  daily. Riders batch daily, shops batch Mondays (UTC).
+- Eligibility requires paid and delivered KES orders, a closed 48-hour refund
+  window, no non-rejected refund request, and a recipient phone unchanged for
+  the configured cooldown (conservatively measured using account `updatedAt`).
+- Configure positive `PAYOUT_MAX_RECIPIENT_KES` and `PAYOUT_MAX_DAILY_KES`;
+  missing caps stop batch creation. `PAYOUT_AUTO_APPROVAL_LIMIT_KES` defaults
+  to zero; larger batches need a different user in `PAYOUT_ADMIN_USER_IDS`.
+- CSV export is guarded by `PAYOUTS_ENABLED=true`. Its default column mapping is
+  explicitly a draft and must be replaced with Safaricom's confirmed upload
+  template. Amounts are rounded to whole KES. Recipient phone and cooldown are
+  checked again before batching and export; changed details require manual review.
+  Export marks a batch `SENDING`; an authorized admin reconciles each result with
+  the exact phone, amount, receipt, and optional registered recipient name.
+  Uncertain results are not retried, and the same CSV batch must never be uploaded
+  more than once.
+- The mock Mode B sender is available only outside production when both
+  `PAYOUTS_ENABLED=true` and `PAYOUTS_MOCK_SENDER_ENABLED=true`; it never sends
+  money. No live Daraja B2C sender is implemented.
+
 ### Delivery payment flow
 
 ```
@@ -95,6 +118,8 @@ Returns: `{ platformFee, deliveryFee, shopPayout, riderPayout, vendlyTotal }`
   receipt, and needsRefund flag for duplicate successful collections
 - `Disbursement` — per-payout record (shop or rider), momoReferenceId @unique,
   momoStatus; this is what webhook handler matches against
+- `Payout`, `PayoutOrder`, and `PayoutBatch` — KES M-Pesa payout ledger,
+  order-share uniqueness, and CSV/manual reconciliation batches
 - `DeliveryJob` — orderId @unique, shopId, riderId, vehicleType (VehicleType enum),
   riderNetPayout, riderPlatformFee, isShopLinked, status
 - `Rider` — vehicleType (VehicleType enum @default(motorcycle)), approvedBy,

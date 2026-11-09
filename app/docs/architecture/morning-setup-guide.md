@@ -258,8 +258,37 @@ DARAJA_SHORTCODE=""
 DARAJA_PASSKEY=""
 DARAJA_CALLBACK_URL="https://your-domain/api/webhook/daraja"
 
+# M-Pesa bulk payout ledger
+# /api/admin/payouts/run is a Vercel Cron endpoint (daily at 02:00 UTC).
+# Riders are batched daily; shops are batched on Mondays (UTC).
+# The endpoint is guarded by Authorization: Bearer $CRON_SECRET.
+# KES payouts use a conservative cooldown based on the recipient record's
+# updatedAt timestamp; unrelated account edits may extend this cooldown.
+# Phone and cooldown are checked again at batching and CSV export. Shares are
+# rounded to whole KES. A changed phone puts the affected payout into manual review.
+# Batches above PAYOUT_AUTO_APPROVAL_LIMIT_KES require a different allow-listed
+# Clerk user to approve them. CSV columns above are a draft, not Safaricom's
+# confirmed upload format. CSV export stays disabled unless PAYOUTS_ENABLED=true.
+# Finance must reconcile each payout from Safaricom's portal using the protected
+# admin reconcile endpoint, including receipt and registered name when available;
+# unknown outcomes are never retried automatically. Never upload a batch twice.
+
 # Delivery quote signing (at least 32 random characters)
 DELIVERY_QUOTE_SECRET=""
+
+# M-Pesa payout ledger / manual bulk CSV
+CRON_SECRET=""
+PAYOUT_ADMIN_USER_IDS="" # comma-separated Clerk user IDs
+PAYOUTS_ENABLED="false" # must be true to export a CSV or run the mock sender
+PAYOUT_MAX_RECIPIENT_KES="" # positive whole-unit cap; required by the scheduler
+PAYOUT_MAX_DAILY_KES="" # positive whole-unit per-recipient daily cap; required
+PAYOUT_AUTO_APPROVAL_LIMIT_KES="0" # zero means no automatic approval
+PAYOUT_PHONE_COOLDOWN_DAYS="7"
+PAYOUT_ANOMALY_ALERT_KES="" # optional alert threshold
+PAYOUTS_MOCK_SENDER_ENABLED="false" # non-production only
+# Draft only; replace labels/mapping after Safaricom supplies its actual template.
+# Allowed fields: payoutId, recipientType, recipientId, phone, amount, currency
+MPESA_BULK_CSV_COLUMNS="Phone:phone,Amount:amount,Reference:payoutId,Remarks:recipientType"
 
 # ============================================
 # EMAILS (Setup later in Phase 6)
