@@ -15,7 +15,7 @@ MoMo webhook: https://zuria.maxnovate.com/api/webhook/momo
 - Framework: Next.js (App Router), TypeScript
 - Auth: Clerk (`@clerk/nextjs`) — Dukaboda app shares this same Clerk instance
 - Database: Prisma ORM → Neon PostgreSQL
-- Payments: MTN MoMo (Collections + Disbursements)
+- Payments: MTN MoMo and Safaricom Daraja (Collections + rider B2C payouts)
 - Delivery: multi-provider registry (Dukaboda custom, SafeBoda, mock)
 - Deploy: Vercel
 
@@ -47,18 +47,39 @@ Customer checkout
   → callbacks/status checks reconcile the PaymentAttempt
   → onPaymentConfirmed() marks the order paid exactly once
   → Order.isPaid = true, products archived
-  → UGX MTN MoMo shop/rider disbursements continue through Disbursement records
+  → eligible UGX shop disbursements continue through MTN MoMo
 ```
 
 Daraja callbacks are received at `POST /api/webhook/daraja`; MTN callbacks continue
-at `POST /api/webhook/momo` (which also routes legacy `ORD-` and `DLV-` references).
-Payment collection supports UGX/MTN MoMo and KES/Safaricom M-Pesa. Automated
-disbursements remain MTN MoMo only.
+at `POST /api/webhook/momo`. Payment collection supports UGX/MTN MoMo and
+KES/Safaricom M-Pesa. Rider payouts use MTN MoMo for UGX or Daraja B2C for KES,
+only after the delivery is confirmed. Daraja B2C callbacks use tokenized HTTPS
+URLs at `/api/webhook/daraja/b2c/result` and `/timeout`.
 Delivery quote signing requires `DELIVERY_QUOTE_SECRET` (at least 32 characters).
+
+### Rider payout providers
+
+- `Rider.payoutProvider` is `mtn-momo` or `mpesa`; existing rows default to
+  `mtn-momo`. MTN numbers normalize to Uganda `256...`, M-Pesa to Kenya `254...`.
+- `POST /api/riders` validates the provider-specific phone. The signed-in
+  `/api/platform/riders/me` endpoint lets riders update payout details; changes
+  are held for `PAYOUT_PHONE_COOLDOWN_DAYS` (7 days by default).
+- `payRiderForDeliveredJob()` sends earnings only once the paid delivery is
+  marked delivered. MTN supports UGX; Daraja B2C supports KES. Provider/currency
+  mismatches and invalid numbers are held for manual review.
+- `Disbursement.payoutKey` prevents duplicate transfer requests. Daraja results
+  persist the Safaricom conversation IDs, receipt, receiver name, and final
+  state. Unknown submission outcomes are never retried automatically.
+- Daraja B2C requires `DARAJA_B2C_SHORTCODE`, `DARAJA_B2C_INITIATOR_NAME`,
+  `DARAJA_B2C_SECURITY_CREDENTIAL`, `DARAJA_B2C_RESULT_URL`,
+  `DARAJA_B2C_TIMEOUT_URL`, and a high-entropy `DARAJA_B2C_CALLBACK_TOKEN`.
+  Callback URLs must be HTTPS and include that token as a `token` query value.
+  `PAYOUT_MAX_RECIPIENT_KES` and `PAYOUT_MAX_DAILY_KES` must also be positive
+  whole-number limits; missing limits or exceeded caps hold a payout for review.
 
 ### M-Pesa payout ledger (manual CSV mode)
 
-- `Payout`/`PayoutOrder` are separate from live MTN `Disbursement` records.
+- `Payout`/`PayoutOrder` remain separate from per-delivery `Disbursement` records.
 - `GET /api/admin/payouts/run` is protected by `CRON_SECRET`; Vercel runs it
   daily. Riders batch daily, shops batch Mondays (UTC).
 - Eligibility requires paid and delivered KES orders, a closed 48-hour refund
@@ -75,9 +96,10 @@ Delivery quote signing requires `DELIVERY_QUOTE_SECRET` (at least 32 characters)
   the exact phone, amount, receipt, and optional registered recipient name.
   Uncertain results are not retried, and the same CSV batch must never be uploaded
   more than once.
-- The mock Mode B sender is available only outside production when both
-  `PAYOUTS_ENABLED=true` and `PAYOUTS_MOCK_SENDER_ENABLED=true`; it never sends
-  money. No live Daraja B2C sender is implemented.
+- M-Pesa riders are excluded from manual rider batches because their eligible
+  delivery earnings use the Daraja B2C path. The mock Mode B sender is available
+  only outside production when both `PAYOUTS_ENABLED=true` and
+  `PAYOUTS_MOCK_SENDER_ENABLED=true`; it never sends money.
 
 ### Delivery payment flow
 
@@ -85,8 +107,7 @@ Delivery quote signing requires `DELIVERY_QUOTE_SECRET` (at least 32 characters)
 referenceId prefix: DLV-{jobId}
   → MTN webhook → POST /api/webhook/momo
   → if DLV-: handleDukaboda() within Zuria's webhook route
-  → reads riderNetPayout from DeliveryJob (set at quote time)
-  → disburses to rider's MTN MoMo number
+  → legacy DLV- references are handled by the MTN webhook dispatcher
 ```
 
 ### Local webhook route (`app/api/webhook/momo/route.ts`)
@@ -116,14 +137,14 @@ Returns: `{ platformFee, deliveryFee, shopPayout, riderPayout, vendlyTotal }`
   shopPayoutStatus, riderPayoutStatus, deliveryCost (Decimal)
 - `PaymentAttempt` — provider, amount/currency snapshot, providerRef, status,
   receipt, and needsRefund flag for duplicate successful collections
-- `Disbursement` — per-payout record (shop or rider), momoReferenceId @unique,
-  momoStatus; this is what webhook handler matches against
+- `Disbursement` — per-payout record; `payoutKey` prevents duplicate rider
+  transfers and provider-specific IDs match callbacks
 - `Payout`, `PayoutOrder`, and `PayoutBatch` — KES M-Pesa payout ledger,
   order-share uniqueness, and CSV/manual reconciliation batches
 - `DeliveryJob` — orderId @unique, shopId, riderId, vehicleType (VehicleType enum),
   riderNetPayout, riderPlatformFee, isShopLinked, status
-- `Rider` — vehicleType (VehicleType enum @default(motorcycle)), approvedBy,
-  isApproved, isActive, rating
+- `Rider` — vehicleType (VehicleType enum @default(motorcycle)),
+  payoutProvider (@default(mtn-momo)), approvedBy, isApproved, isActive, rating
 - `Product` — price (Decimal), isArchived
 
 ### VehicleType enum

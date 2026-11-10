@@ -95,7 +95,7 @@ const STEPS = [
   {
     step:        "2",
     title:       "Create your profile",
-    description: "Enter your name, MTN MoMo number, and vehicle type.",
+    description: "Enter your name, payout number, choose MTN MoMo or Safaricom M-Pesa, and select your vehicle.",
   },
   {
     step:        "3",
@@ -105,7 +105,7 @@ const STEPS = [
   {
     step:        "4",
     title:       "Start delivering",
-    description: "Accept jobs, deliver orders, earn via MoMo after every confirmed drop-off.",
+    description: "Accept jobs, deliver orders, and earn after each confirmed drop-off.",
   },
 ];
 
@@ -138,8 +138,8 @@ export default function DukabodaLandingPage() {
           </h1>
           <p className="text-lg text-gray-500 mb-8 leading-relaxed">
             Join Kampala&apos;s fastest-growing delivery network. Pick up orders
-            from Vendly shops and earn the delivery fee — paid directly to your
-            MTN MoMo number after every confirmed drop-off.
+            from             Vendly shops and earn the delivery fee — paid after every
+            confirmed drop-off to your chosen MTN MoMo or Safaricom M-Pesa number.
           </p>
           <a
             href={APK_URL}
@@ -240,8 +240,8 @@ export default function DukabodaLandingPage() {
             },
             {
               icon:  "📱",
-              title: "MoMo pay per delivery",
-              body:  "Earnings go directly to your registered MTN MoMo number after each confirmed drop-off. No weekly waits.",
+              title: "Mobile money pay per delivery",
+              body:  "Choose MTN MoMo in Uganda or Safaricom M-Pesa in Kenya. Earnings are sent after each confirmed drop-off.",
             },
             {
               icon:  "🕐",
@@ -376,7 +376,7 @@ export default function DukabodaLandingPage() {
         </div>
 
         <p className="text-xs text-gray-400 text-center mt-6">
-          All earnings paid to your registered MTN MoMo number after each
+          Choose MTN MoMo for UGX or Safaricom M-Pesa for KES payouts after a
           confirmed delivery
         </p>
       </section>
@@ -414,7 +414,7 @@ export default function DukabodaLandingPage() {
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           {[
             "Android smartphone",
-            "Active MTN MoMo number (for payouts)",
+            "Active MTN MoMo or Safaricom M-Pesa number (for payouts)",
             "Motorcycle, bicycle, or car",
             "Knowledge of Kampala roads",
             "Reliable mobile data connection",

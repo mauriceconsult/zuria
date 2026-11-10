@@ -4,6 +4,7 @@ import {
   buildEligiblePayoutBatches,
   createEligiblePayouts,
 } from "@/lib/payouts/ledger";
+import { releaseMaturedRiderPayouts } from "@/lib/payouts/rider-delivery";
 
 export const dynamic = "force-dynamic";
 
@@ -13,12 +14,13 @@ export async function GET(request: Request) {
 
   try {
     const eligibility = await createEligiblePayouts();
+    const riderPayouts = await releaseMaturedRiderPayouts();
     const today = new Date();
     const batches = await buildEligiblePayoutBatches({
       includeShops: today.getUTCDay() === 1,
       now: today,
     });
-    return NextResponse.json({ eligibility, ...batches });
+    return NextResponse.json({ eligibility, riderPayouts, ...batches });
   } catch (error) {
     console.error("[PAYOUT_CRON] Payout run failed", {
       error: error instanceof Error ? error.message : error,

@@ -3,6 +3,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { prisma } from "@/lib/prisma";
+import { payRiderForDeliveredJob } from "@/lib/payouts/rider-delivery";
 
 const VALID_TRANSITIONS: Record<string, string[]> = {
   accepted: ["picking_up", "cancelled"],
@@ -58,6 +59,10 @@ export async function PATCH(
       ...(isDelivered && { deliveredAt: new Date() }),
     },
   });
+
+  if (isDelivered) {
+    await payRiderForDeliveredJob(jobId);
+  }
 
   return NextResponse.json(updated);
 }

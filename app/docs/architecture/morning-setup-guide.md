@@ -258,9 +258,19 @@ DARAJA_SHORTCODE=""
 DARAJA_PASSKEY=""
 DARAJA_CALLBACK_URL="https://your-domain/api/webhook/daraja"
 
+# Daraja B2C rider payouts (KES; only after delivery confirmation)
+DARAJA_B2C_SHORTCODE=""
+DARAJA_B2C_INITIATOR_NAME=""
+DARAJA_B2C_SECURITY_CREDENTIAL="" # Safaricom-encrypted initiator password
+DARAJA_B2C_CALLBACK_TOKEN="" # high-entropy secret; never expose to the mobile app
+DARAJA_B2C_RESULT_URL="https://your-domain/api/webhook/daraja/b2c/result?token=<same-secret>"
+DARAJA_B2C_TIMEOUT_URL="https://your-domain/api/webhook/daraja/b2c/timeout?token=<same-secret>"
+# DARAJA_B2C_COMMAND_ID="BusinessPayment" # use only a Safaricom-enabled command
+
 # M-Pesa bulk payout ledger
 # /api/admin/payouts/run is a Vercel Cron endpoint (daily at 02:00 UTC).
-# Riders are batched daily; shops are batched on Mondays (UTC).
+# Eligible manual rider shares are batched daily; shops are batched on Mondays (UTC).
+# Riders configured for automatic M-Pesa payouts are excluded from these batches.
 # The endpoint is guarded by Authorization: Bearer $CRON_SECRET.
 # KES payouts use a conservative cooldown based on the recipient record's
 # updatedAt timestamp; unrelated account edits may extend this cooldown.
@@ -282,6 +292,7 @@ PAYOUT_ADMIN_USER_IDS="" # comma-separated Clerk user IDs
 PAYOUTS_ENABLED="false" # must be true to export a CSV or run the mock sender
 PAYOUT_MAX_RECIPIENT_KES="" # positive whole-unit cap; required by the scheduler
 PAYOUT_MAX_DAILY_KES="" # positive whole-unit per-recipient daily cap; required
+# These limits also guard automatic Daraja B2C rider transfers.
 PAYOUT_AUTO_APPROVAL_LIMIT_KES="0" # zero means no automatic approval
 PAYOUT_PHONE_COOLDOWN_DAYS="7"
 PAYOUT_ANOMALY_ALERT_KES="" # optional alert threshold

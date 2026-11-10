@@ -2,6 +2,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { VehicleType } from "@prisma/client";
+import {
+  getProvider,
+  normalizeProviderPhone,
+} from "@/lib/payments/providers";
 
 interface PrismaError extends Error {
   code?: string;
@@ -31,25 +35,44 @@ export async function POST(req: NextRequest) {
     }
 
     // ── Parse body ────────────────────────────────────────────────────────
-    const body = await req.json().catch(() => null);
+    const body: unknown = await req.json().catch(() => null);
 
-    if (!body) {
+    if (
+      typeof body !== "object" ||
+      body === null ||
+      Array.isArray(body)
+    ) {
       return NextResponse.json(
         { error: "Invalid request body" },
         { status: 400 }
       );
     }
 
-    const { clerkId, name, phone, email, vehicleType } = body as {
+    const {
+      clerkId,
+      name,
+      phone,
+      email,
+      vehicleType,
+      payoutProvider = "mtn-momo",
+    } = body as {
       clerkId?:    string;
       name?:       string;
       phone?:      string;
       email?:      string;
       vehicleType?: string;
+      payoutProvider?: string;
     };
 
     // ── Validate ──────────────────────────────────────────────────────────
-    if (!clerkId || !name || !phone || !vehicleType) {
+    if (
+      typeof clerkId !== "string" ||
+      typeof name !== "string" ||
+      typeof phone !== "string" ||
+      typeof vehicleType !== "string" ||
+      !clerkId.trim() ||
+      !name.trim()
+    ) {
       return NextResponse.json(
         { error: "Missing required fields: clerkId, name, phone, vehicleType" },
         { status: 400 }
@@ -67,11 +90,61 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    const paymentProvider = getProvider(payoutProvider);
+    if (!paymentProvider) {
+      return NextResponse.json(
+        { error: "payoutProvider must be 'mtn-momo' or 'mpesa'." },
+        { status: 400 },
+      );
+    }
+
+    const normalizedPhone = normalizeProviderPhone(paymentProvider, phone);
+    if (!normalizedPhone) {
+      return NextResponse.json(
+        {
+          error: `Enter a valid ${paymentProvider.id === "mpesa" ? "Kenyan Safaricom M-Pesa" : "Ugandan MTN MoMo"} number.`,
+        },
+        { status: 400 },
+      );
+    }
+
+    const existing = await prisma.rider.findUnique({
+      where: { clerkId },
+      select: { phone: true, payoutProvider: true },
+    });
+    const existingProvider = existing
+      ? getProvider(existing.payoutProvider)
+      : undefined;
+    const existingPhone = existingProvider
+      ? normalizeProviderPhone(existingProvider, existing?.phone ?? "")
+      : existing?.phone;
+    if (
+      existing &&
+      (existingPhone !== normalizedPhone ||
+        existing?.payoutProvider !== paymentProvider.id)
+    ) {
+      return NextResponse.json(
+        { error: "Update payout details from your signed-in rider profile." },
+        { status: 409 },
+      );
+    }
+
     // ── Upsert ────────────────────────────────────────────────────────────
     const rider = await prisma.rider.upsert({
       where:  { clerkId },
-      update: { name, phone, email: email ?? "", vehicleType: vehicleType as VehicleType },
-      create: { clerkId, name, phone, email: email ?? "", vehicleType: vehicleType as VehicleType },
+      update: {
+        name,
+        email: email ?? "",
+        vehicleType: vehicleType as VehicleType,
+      },
+      create: {
+        clerkId,
+        name,
+        phone: normalizedPhone,
+        email: email ?? "",
+        vehicleType: vehicleType as VehicleType,
+        payoutProvider: paymentProvider.id,
+      },
     });
 
     console.log("[/api/riders] Rider upserted:", rider.id);

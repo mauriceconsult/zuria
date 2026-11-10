@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { handleZuria } from "@/lib/payments/handlers/zuria";
 import { handleDukaboda } from "@/lib/payments/handlers/dukaboda";
+import { handleDisbursement } from "@/lib/payments/handlers/disbursement";
 import { reconcileAttempt } from "@/lib/payments/reconcile";
 
 export async function POST(req: Request) {
@@ -9,6 +10,10 @@ export async function POST(req: Request) {
   const referenceId: string = payload.referenceId ?? "";
 
   try {
+    const isDisbursement = await handleDisbursement(payload);
+    if (isDisbursement) {
+      return NextResponse.json({ received: true });
+    }
     if (referenceId.startsWith("ORD-")) {
       await handleZuria(payload);
     } else if (referenceId.startsWith("DLV-")) {

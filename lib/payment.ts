@@ -157,45 +157,7 @@ export async function onPaymentConfirmed(
     );
   }
 
-  if (
-    paymentCurrency === "UGX" &&
-    deliveryJob?.rider?.phone &&
-    riderPayout > 0
-  ) {
-    disbursements.push(
-      disburseToPhone({
-        recipientType: "rider",
-        phone: deliveryJob.rider.phone,
-        amount: riderPayout,
-        currency: paymentCurrency,
-        orderId: order.id,
-        note: `Dukaboda delivery payout — order ${order.id}${
-          deliveryFee > 0 ? ` (platform fee UGX ${deliveryFee} deducted)` : ""
-        }`,
-      })
-        .then(() => {
-          console.log(
-            `[RIDER_PAYOUT] Rider ${deliveryJob.rider!.name} receives UGX ${riderPayout}` +
-              (deliveryFee > 0
-                ? ` (Vendly kept UGX ${deliveryFee})`
-                : " (full fee — shop-linked rider)"),
-          );
-          return prisma.order.update({
-            where: { id: orderId },
-            data: { riderPayoutStatus: "sent" },
-          });
-        })
-        .then(() => {})
-        .catch(async (err) => {
-          console.error(`[RIDER_DISBURSE_ERROR] Order ${orderId}:`, err);
-          await prisma.order.update({
-            where: { id: orderId },
-            data: { riderPayoutStatus: "failed" },
-          });
-        }),
-    );
-  }
-
+  // Rider earnings are transferred only after the delivery status is confirmed.
   await Promise.allSettled(disbursements);
 
   // ── 6. Trigger delivery ──────────────────────────────────────────────────

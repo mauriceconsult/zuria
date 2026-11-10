@@ -248,7 +248,8 @@ export async function createEligiblePayouts(now = new Date()) {
     if (
       order.riderPayout &&
       order.riderPayout.toNumber() > 0 &&
-      order.jobs?.rider
+      order.jobs?.rider &&
+      order.jobs.rider.payoutProvider !== "mpesa"
     ) {
       shares.push({
         recipientType: "rider",

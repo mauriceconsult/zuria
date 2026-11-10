@@ -1,6 +1,7 @@
 // app/api/platform/delivery/jobs/[jobId]/status/route.ts
 import { requirePlatformUser } from "@/lib/platform-auth";
 import { prisma } from "@/lib/prisma";
+import { payRiderForDeliveredJob } from "@/lib/payouts/rider-delivery";
 import { NextResponse } from "next/server";
 
 const VALID_TRANSITIONS: Record<string, string[]> = {
@@ -57,6 +58,10 @@ export async function PATCH(
         ...(isDelivered && { deliveredAt: new Date() }),
       },
     });
+
+    if (isDelivered) {
+      await payRiderForDeliveredJob(jobId);
+    }
 
     return NextResponse.json(updated);
   } catch (error) {

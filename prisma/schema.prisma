@@ -213,6 +213,12 @@ model Disbursement {
 
   momoReferenceId String   @unique
 
+  payoutKey              String?  @unique
+  providerConversationId String?  @unique
+  providerOriginatorId   String?  @unique
+  receipt                String?
+  receiverName           String?
+
   momoStatus      String   @default("PROCESSING")
   failureReason   String?
 
@@ -272,6 +278,8 @@ model Rider {
   email         String
 
   vehicleType   VehicleType          @default(motorcycle)
+  payoutProvider String              @default("mtn-momo")
+  payoutDetailsUpdatedAt DateTime?
 
   isActive      Boolean              @default(true)
 

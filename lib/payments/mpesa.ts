@@ -187,3 +187,107 @@ export async function verifyMpesaPayment(
   }
   return { status: "PENDING" };
 }
+
+export interface MpesaDisbursementResponse {
+  conversationId: string;
+  originatorConversationId: string;
+}
+
+export async function initiateMpesaDisbursement(input: {
+  amount: number;
+  phoneNumber: string;
+  reference: string;
+}): Promise<MpesaDisbursementResponse> {
+  const {
+    DARAJA_BASE_URL = "https://sandbox.safaricom.co.ke",
+    DARAJA_CONSUMER_KEY,
+    DARAJA_CONSUMER_SECRET,
+    DARAJA_B2C_SHORTCODE,
+    DARAJA_B2C_INITIATOR_NAME,
+    DARAJA_B2C_SECURITY_CREDENTIAL,
+    DARAJA_B2C_RESULT_URL,
+    DARAJA_B2C_TIMEOUT_URL,
+    DARAJA_B2C_CALLBACK_TOKEN,
+  } = process.env;
+
+  if (
+    !DARAJA_CONSUMER_KEY ||
+    !DARAJA_CONSUMER_SECRET ||
+    !DARAJA_B2C_SHORTCODE ||
+    !DARAJA_B2C_INITIATOR_NAME ||
+    !DARAJA_B2C_SECURITY_CREDENTIAL ||
+    !DARAJA_B2C_RESULT_URL ||
+    !DARAJA_B2C_TIMEOUT_URL ||
+    !DARAJA_B2C_CALLBACK_TOKEN
+  ) {
+    throw new Error("Missing Daraja B2C configuration");
+  }
+
+  const callbackUrls = [DARAJA_B2C_RESULT_URL, DARAJA_B2C_TIMEOUT_URL];
+  for (const callbackUrl of callbackUrls) {
+    const url = new URL(callbackUrl);
+    if (
+      url.protocol !== "https:" ||
+      url.searchParams.get("token") !== DARAJA_B2C_CALLBACK_TOKEN
+    ) {
+      throw new Error(
+        "Daraja B2C callback URLs must use HTTPS and include the configured callback token",
+      );
+    }
+  }
+
+  if (
+    !Number.isSafeInteger(input.amount) ||
+    input.amount <= 0 ||
+    !/^254[17]\d{8}$/.test(input.phoneNumber)
+  ) {
+    throw new Error("Invalid Daraja B2C amount or recipient phone number");
+  }
+
+  const config: DarajaConfig = {
+    baseUrl: DARAJA_BASE_URL.replace(/\/+$/, ""),
+    consumerKey: DARAJA_CONSUMER_KEY,
+    consumerSecret: DARAJA_CONSUMER_SECRET,
+    shortcode: DARAJA_B2C_SHORTCODE,
+    passkey: "",
+    callbackUrl: "",
+  };
+  const token = await getAccessToken(config);
+  const response = await postJson<{
+    ResponseCode?: string;
+    ResponseDescription?: string;
+    ConversationID?: string;
+    OriginatorConversationID?: string;
+    errorMessage?: string;
+  }>(
+    `${config.baseUrl}/mpesa/b2c/v1/paymentrequest`,
+    token,
+    {
+      InitiatorName: DARAJA_B2C_INITIATOR_NAME,
+      SecurityCredential: DARAJA_B2C_SECURITY_CREDENTIAL,
+      CommandID: process.env.DARAJA_B2C_COMMAND_ID ?? "BusinessPayment",
+      Amount: input.amount,
+      PartyA: DARAJA_B2C_SHORTCODE,
+      PartyB: input.phoneNumber,
+      Remarks: input.reference.slice(0, 100),
+      QueueTimeOutURL: DARAJA_B2C_TIMEOUT_URL,
+      ResultURL: DARAJA_B2C_RESULT_URL,
+      Occasion: "Dukaboda rider payout",
+    },
+  );
+
+  if (
+    response.ResponseCode !== "0" ||
+    !response.ConversationID ||
+    !response.OriginatorConversationID
+  ) {
+    throw new Error(
+      response.ResponseDescription ?? "Daraja rejected the B2C payout request",
+    );
+  }
+
+  return {
+    conversationId: response.ConversationID,
+    originatorConversationId: response.OriginatorConversationID,
+  };
+}
