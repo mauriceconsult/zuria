@@ -15,7 +15,7 @@ MoMo webhook: https://zuria.maxnovate.com/api/webhook/momo
 - Framework: Next.js (App Router), TypeScript
 - Auth: Clerk (`@clerk/nextjs`) — Dukaboda app shares this same Clerk instance
 - Database: Prisma ORM → Neon PostgreSQL
-- Payments: MTN MoMo and Safaricom Daraja (Collections + rider B2C payouts)
+- Payments: MTN MoMo and Safaricom Daraja collections; KES payouts use a manual Safaricom VCF workflow
 - Delivery: multi-provider registry (Dukaboda custom, SafeBoda, mock)
 - Deploy: Vercel
 
@@ -51,10 +51,10 @@ Customer checkout
 ```
 
 Daraja callbacks are received at `POST /api/webhook/daraja`; MTN callbacks continue
-at `POST /api/webhook/momo`. Payment collection supports UGX/MTN MoMo and
-KES/Safaricom M-Pesa. Rider payouts use MTN MoMo for UGX or Daraja B2C for KES,
-only after the delivery is confirmed. Daraja B2C callbacks use tokenized HTTPS
-URLs at `/api/webhook/daraja/b2c/result` and `/timeout`.
+at `POST /api/webhook/momo`. Payment collection supports UGX/MTN MoMo and KES/Safaricom M-Pesa. Rider
+payouts use MTN MoMo for UGX after delivery confirmation. KES payouts are
+processed through the manual Safaricom Send to Many workflow; Zuria does not
+submit Daraja B2C payout requests.
 Delivery quote signing requires `DELIVERY_QUOTE_SECRET` (at least 32 characters).
 
 ### Rider payout providers
@@ -65,19 +65,13 @@ Delivery quote signing requires `DELIVERY_QUOTE_SECRET` (at least 32 characters)
   `/api/platform/riders/me` endpoint lets riders update payout details; changes
   are held for `PAYOUT_PHONE_COOLDOWN_DAYS` (7 days by default).
 - `payRiderForDeliveredJob()` sends earnings only once the paid delivery is
-  marked delivered. MTN supports UGX; Daraja B2C supports KES. Provider/currency
-  mismatches and invalid numbers are held for manual review.
-- `Disbursement.payoutKey` prevents duplicate transfer requests. Daraja results
-  persist the Safaricom conversation IDs, receipt, receiver name, and final
-  state. Unknown submission outcomes are never retried automatically.
-- Daraja B2C requires `DARAJA_B2C_SHORTCODE`, `DARAJA_B2C_INITIATOR_NAME`,
-  `DARAJA_B2C_SECURITY_CREDENTIAL`, `DARAJA_B2C_RESULT_URL`,
-  `DARAJA_B2C_TIMEOUT_URL`, and a high-entropy `DARAJA_B2C_CALLBACK_TOKEN`.
-  Callback URLs must be HTTPS and include that token as a `token` query value.
-  `PAYOUT_MAX_RECIPIENT_KES` and `PAYOUT_MAX_DAILY_KES` must also be positive
-  whole-number limits; missing limits or exceeded caps hold a payout for review.
+  marked delivered. MTN supports UGX; KES/M-Pesa payouts are queued for the
+  manual payout ledger after the refund window and payout-detail cooldown.
+  Provider/currency mismatches and invalid numbers require
+  manual review. Per-delivery MTN transfers use `Disbursement.payoutKey` to
+  prevent duplicate requests.
 
-### M-Pesa payout ledger (manual CSV mode)
+### Safaricom payout ledger (manual VCF mode)
 
 - `Payout`/`PayoutOrder` remain separate from per-delivery `Disbursement` records.
 - `GET /api/admin/payouts/run` is protected by `CRON_SECRET`; Vercel runs it
@@ -86,20 +80,29 @@ Delivery quote signing requires `DELIVERY_QUOTE_SECRET` (at least 32 characters)
   window, no non-rejected refund request, and a recipient phone unchanged for
   the configured cooldown (conservatively measured using account `updatedAt`).
 - Configure positive `PAYOUT_MAX_RECIPIENT_KES` and `PAYOUT_MAX_DAILY_KES`;
-  missing caps stop batch creation. `PAYOUT_AUTO_APPROVAL_LIMIT_KES` defaults
-  to zero; larger batches need a different user in `PAYOUT_ADMIN_USER_IDS`.
-- CSV export is guarded by `PAYOUTS_ENABLED=true`. Its default column mapping is
-  explicitly a draft and must be replaced with Safaricom's confirmed upload
-  template. Amounts are rounded to whole KES. Recipient phone and cooldown are
-  checked again before batching and export; changed details require manual review.
-  Export marks a batch `SENDING`; an authorized admin reconciles each result with
-  the exact phone, amount, receipt, and optional registered recipient name.
-  Uncertain results are not retried, and the same CSV batch must never be uploaded
-  more than once.
-- M-Pesa riders are excluded from manual rider batches because their eligible
-  delivery earnings use the Daraja B2C path. The mock Mode B sender is available
-  only outside production when both `PAYOUTS_ENABLED=true` and
-  `PAYOUTS_MOCK_SENDER_ENABLED=true`; it never sends money.
+  both also respect the hard Safaricom caps. `PAYOUT_AUTO_APPROVAL_LIMIT_KES`
+  defaults to zero; larger batches need approval by a different user in
+  `PAYOUT_ADMIN_USER_IDS`.
+- KES batches contain no more than five recipients per set. Each payout is
+  capped at KES 250,000; all scheduled sets plus money already sent that Nairobi
+  day must stay at or below KES 500,000. The planner reserves room for previously
+  scheduled sets, and a recipient is capped at KES 500,000 per Nairobi day.
+- An authorized admin uses `/safaricom-payouts` to download one VCF per set,
+  after explicitly entering other money already sent that day (zero is valid).
+  VCF contact names include batch, set, role, recipient, and amount. Verify
+  imported names and amounts in Safaricom Send to Many on the approved business
+  line before sending. A set can be exported only once.
+- After sending, record the exact set total; a mismatch is rejected. Confirm
+  only after checking Safaricom results/receipts. Each export, sent action, and
+  confirmation records the admin and timestamp. A batch becomes `PAID` only
+  when every set is confirmed. Delete the `ZP-<batch>` contacts from the phone
+  after confirming. Retain the VCF, Safaricom receipts, and payout ledger
+  reconciliation according to finance policy.
+- More than 40 sets/sends in a Nairobi week triggers an operational warning.
+  Ask Safaricom about the appropriate business-line process before volume grows.
+- Only KES/M-Pesa payouts enter these batches; the MTN disbursement path remains
+  UGX-only. Any matching existing M-Pesa `Disbursement` excludes that payout
+  from the manual ledger. Never use Daraja B2C for delivery payouts.
 
 ### Delivery payment flow
 

@@ -27,7 +27,7 @@ model Shop {
   products       Product[]       @relation("ShopToProduct")
   refundRequests RefundRequest[] @relation("ShopToRefundRequest")
   sizes          Size[]          @relation("ShopToSize")
-  deliveryJobs DeliveryJob[]
+  deliveryJobs   DeliveryJob[]
 
   @@index([userId])
 }
@@ -44,6 +44,7 @@ model Billboard {
 
   @@index([shopId])
 }
+
 enum VehicleType {
   motorcycle
   bicycle
@@ -130,66 +131,67 @@ model Image {
 }
 
 model Order {
-  id                  String         @id @default(uuid())
+  id String @id @default(uuid())
 
-  shopId              String
+  shopId String
 
-  isPaid              Boolean        @default(false)
+  isPaid Boolean @default(false)
 
-  paymentMethod       String         @default("stripe")
-  paymentStatus       String         @default("pending")
-  paymentRef          String?
+  paymentMethod String  @default("stripe")
+  paymentStatus String  @default("pending")
+  paymentRef    String?
 
   deliveryMethod      String?
   deliveryProvider    String?
   deliveryQuoteId     String?
   deliveryRef         String?
-  deliveryStatus      String         @default("pending")
+  deliveryStatus      String  @default("pending")
   deliveryTrackingUrl String?
 
-  deliveryCost        Decimal?
-  platformFee         Decimal?
-  shopPayout          Decimal?
-  riderPayout         Decimal?
+  deliveryCost Decimal?
+  platformFee  Decimal?
+  shopPayout   Decimal?
+  riderPayout  Decimal?
 
-  shopPayoutStatus    String         @default("not_applicable")
-  riderPayoutStatus   String         @default("not_applicable")
+  shopPayoutStatus  String @default("not_applicable")
+  riderPayoutStatus String @default("not_applicable")
 
-  phone               String         @default("")
-  address             String         @default("")
-  deliveryLat         Float?
-  deliveryLng         Float?
-  deliveredAt         DateTime?
+  phone       String    @default("")
+  address     String    @default("")
+  deliveryLat Float?
+  deliveryLng Float?
+  deliveredAt DateTime?
 
-  createdAt           DateTime       @default(now())
-  updatedAt           DateTime       @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  shop                Shop           @relation("ShopToOrder", fields: [shopId], references: [id])
-  jobs                DeliveryJob?
-  orderItems          OrderItem[]
-  disbursements Disbursement[]
-  refundRequest       RefundRequest?
-    currency        String?   // snapshot of shop.currency at checkout
-  amount          Decimal?  // what the buyer is charged, in whole units
+  shop            Shop             @relation("ShopToOrder", fields: [shopId], references: [id])
+  jobs            DeliveryJob?
+  orderItems      OrderItem[]
+  disbursements   Disbursement[]
+  refundRequest   RefundRequest?
+  currency        String? // snapshot of shop.currency at checkout
+  amount          Decimal? // what the buyer is charged, in whole units
   paymentAttempts PaymentAttempt[]
   payoutOrders    PayoutOrder[]
 
   @@index([shopId])
 }
-model PaymentAttempt {
-  id            String   @id @default(uuid())
-  orderId       String
-  order         Order    @relation(fields: [orderId], references: [id])
 
-  provider      String   // "mtn-momo" | "mpesa", matching your Disbursement.provider convention
-  providerRef   String?  @unique   // CheckoutRequestID for M-Pesa, set after the push succeeds
+model PaymentAttempt {
+  id      String @id @default(uuid())
+  orderId String
+  order   Order  @relation(fields: [orderId], references: [id])
+
+  provider      String // "mtn-momo" | "mpesa", matching your Disbursement.provider convention
+  providerRef   String? @unique // CheckoutRequestID for M-Pesa, set after the push succeeds
   amount        Decimal
   currency      String
-  phoneLast4    String?  // keep the full number out of this table
-  status        String   @default("PENDING") // PENDING | COMPLETED | FAILED
+  phoneLast4    String? // keep the full number out of this table
+  status        String  @default("PENDING") // PENDING | COMPLETED | FAILED
   receipt       String?
   failureReason String?
-  needsRefund   Boolean  @default(false)     // paid after the order was already paid
+  needsRefund   Boolean @default(false) // paid after the order was already paid
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -197,35 +199,36 @@ model PaymentAttempt {
   @@index([orderId])
   @@index([status])
 }
+
 model Disbursement {
-  id              String   @id @default(uuid())
+  id String @id @default(uuid())
 
-  orderId         String
-  order           Order    @relation(fields: [orderId], references: [id])
+  orderId String
+  order   Order  @relation(fields: [orderId], references: [id])
 
-  provider String @default("mtn-momo")
-  recipientType   String   // "shop" | "rider"
+  provider      String @default("mtn-momo")
+  recipientType String // "shop" | "rider"
 
-  phone           String
+  phone String
 
-  amount          Decimal
-  currency        String
+  amount   Decimal
+  currency String
 
-  momoReferenceId String   @unique
+  momoReferenceId String @unique
 
-  payoutKey              String?  @unique
-  providerConversationId String?  @unique
-  providerOriginatorId   String?  @unique
+  payoutKey              String? @unique
+  providerConversationId String? @unique
+  providerOriginatorId   String? @unique
   receipt                String?
   receiverName           String?
 
-  momoStatus      String   @default("PROCESSING")
-  failureReason   String?
+  momoStatus    String  @default("PROCESSING")
+  failureReason String?
 
-  completedAt     DateTime?
+  completedAt DateTime?
 
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([orderId])
   @@index([momoStatus])
@@ -271,106 +274,138 @@ enum RiderApprovalSource {
 }
 
 model Rider {
-  id            String               @id @default(uuid())
-  clerkId       String               @unique
-  name          String
-  phone         String
-  email         String
+  id      String @id @default(uuid())
+  clerkId String @unique
+  name    String
+  phone   String
+  email   String
 
-  vehicleType   VehicleType          @default(motorcycle)
-  payoutProvider String              @default("mtn-momo")
+  vehicleType            VehicleType @default(motorcycle)
+  payoutProvider         String      @default("mtn-momo")
   payoutDetailsUpdatedAt DateTime?
 
-  isActive      Boolean              @default(true)
+  isActive Boolean @default(true)
 
-  isApproved    Boolean              @default(false)
-  approvedBy    RiderApprovalSource?
-  approvedById  String?
-  approvedAt    DateTime?
+  isApproved   Boolean              @default(false)
+  approvedBy   RiderApprovalSource?
+  approvedById String?
+  approvedAt   DateTime?
 
-  rating        Float                @default(5.0)
+  rating Float @default(5.0)
 
-  createdAt     DateTime             @default(now())
-  updatedAt     DateTime             @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  jobs          DeliveryJob[]
+  jobs DeliveryJob[]
 }
 
 model DeliveryJob {
-  id           String      @id @default(uuid())
-  orderId      String      @unique
-  shopId       String
-  riderId      String?
+  id      String  @id @default(uuid())
+  orderId String  @unique
+  shopId  String
+  riderId String?
 
-  vehicleType  VehicleType?
+  vehicleType VehicleType?
 
-  status       String      @default("pending")
-  deliveryCost Float       @default(0)
+  status       String @default("pending")
+  deliveryCost Float  @default(0)
 
-  lastLat      Float?
-  lastLng      Float?
+  lastLat Float?
+  lastLng Float?
 
-  acceptedAt   DateTime?
-  deliveredAt  DateTime?
+  acceptedAt  DateTime?
+  deliveredAt DateTime?
 
-  createdAt    DateTime    @default(now())
-  updatedAt    DateTime    @updatedAt
-  shops Shop[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  shops     Shop[]
 
-  order         Order      @relation(fields: [orderId], references: [id])
-  rider         Rider?     @relation(fields: [riderId], references: [id])
+  order Order  @relation(fields: [orderId], references: [id])
+  rider Rider? @relation(fields: [riderId], references: [id])
 
   @@index([status])
   @@index([riderId])
   @@index([vehicleType])
 }
-model Payout {
-  id             String   @id @default(uuid())
-  batchId        String?
-  batch          PayoutBatch? @relation(fields: [batchId], references: [id], onDelete: SetNull)
-  recipientType  String   // "shop" | "rider"
-  recipientId    String
-  phone          String
-  amount         Decimal
-  currency       String
-  provider       String   @default("mpesa")
 
-  status         String   @default("ELIGIBLE") // ELIGIBLE | BATCHED | SENT | PAID | FAILED | UNKNOWN | MANUAL
-  idempotencyKey String   @unique              // e.g. "<recipientId>:<period>"
-  conversationId String?  @unique              // Safaricom's id, set after sending
+model Payout {
+  id            String       @id @default(uuid())
+  batchId       String?
+  batch         PayoutBatch? @relation(fields: [batchId], references: [id], onDelete: SetNull)
+  payoutSetId   String?
+  payoutSet     PayoutSet?   @relation(fields: [payoutSetId], references: [id], onDelete: SetNull)
+  recipientType String // "shop" | "rider"
+  recipientId   String
+  phone         String
+  amount        Decimal
+  currency      String
+  provider      String       @default("mpesa")
+
+  status         String    @default("ELIGIBLE") // ELIGIBLE | BATCHED | SENT | PAID | FAILED | UNKNOWN | MANUAL
+  idempotencyKey String    @unique // e.g. "<recipientId>:<period>"
+  conversationId String?   @unique // Safaricom's id, set after sending
   receipt        String?
-  receiverName   String?  // Safaricom returns the registered name: log it
+  receiverName   String? // Safaricom returns the registered name: log it
   failureCode    String?
   failureReason  String?
   sentAt         DateTime?
   paidAt         DateTime?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 
   orders PayoutOrder[]
+
   @@index([status])
   @@index([batchId])
+  @@index([payoutSetId])
 }
 
-model PayoutOrder {          // which orders a payout covers
+model PayoutOrder {
   payoutId      String
   orderId       String
   recipientType String
   amount        Decimal
-  payout        Payout @relation(fields: [payoutId], references: [id], onDelete: Cascade)
-  order         Order  @relation(fields: [orderId], references: [id])
+  payout        Payout  @relation(fields: [payoutId], references: [id], onDelete: Cascade)
+  order         Order   @relation(fields: [orderId], references: [id])
+
   @@id([payoutId, orderId])
-  @@unique([orderId, recipientType])   // an order's shop/rider share can be paid once, ever
+  @@unique([orderId, recipientType]) // an order's shop/rider share can be paid once, ever
   @@index([orderId])
 }
 
 model PayoutBatch {
-  id          String   @id @default(uuid())
-  status      String   @default("DRAFT") // DRAFT | APPROVED | SENDING | DONE | PARTIAL
+  id          String      @id @default(uuid())
+  status      String      @default("DRAFT") // DRAFT | APPROVED | SENDING | PAID | DONE | PARTIAL
   totalAmount Decimal
   createdBy   String?
   approvedBy  String?
   approvedAt  DateTime?
   createdAt   DateTime @default(now())
   payouts     Payout[]
+  payoutSets  PayoutSet[]
+}
+
+model PayoutSet {
+  id                  String      @id @default(uuid())
+  batchId             String
+  setNo               Int
+  scheduledDate       DateTime    @db.Date
+  totalAmount         Decimal
+  status              String      @default("PENDING") // PENDING | SENT | CONFIRMED
+  exportedBy          String?
+  exportedAt          DateTime?
+  otherMoneySentToday Decimal?
+  sentBy              String?
+  sentAt              DateTime?
+  sentAmount          Decimal?
+  confirmedBy         String?
+  confirmedAt         DateTime?
+  createdAt           DateTime    @default(now())
+  updatedAt           DateTime    @updatedAt
+  batch               PayoutBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  payouts             Payout[]
+
+  @@unique([batchId, setNo])
+  @@index([scheduledDate, status])
+  @@index([batchId, status])
 }

@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { requirePayoutAdmin } from "@/lib/payouts/admin";
+import { planApprovedPayoutSets } from "@/lib/payouts/safaricom-ledger";
 import { NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
@@ -23,15 +24,20 @@ export async function POST(
     );
   }
 
-  const approved = await prisma.payoutBatch.updateMany({
-    where: { id: batch.id, status: "DRAFT" },
-    data: {
-      status: "APPROVED",
-      approvedBy: admin.userId!,
-      approvedAt: new Date(),
-    },
+  const approved = await prisma.$transaction(async (transaction) => {
+    const result = await transaction.payoutBatch.updateMany({
+      where: { id: batch.id, status: "DRAFT" },
+      data: {
+        status: "APPROVED",
+        approvedBy: admin.userId!,
+        approvedAt: new Date(),
+      },
+    });
+    if (result.count !== 1) return false;
+    await planApprovedPayoutSets(transaction, batch.id);
+    return true;
   });
-  if (approved.count !== 1) {
+  if (!approved) {
     return NextResponse.json({ error: "Batch changed before approval." }, { status: 409 });
   }
   return NextResponse.json(

@@ -258,48 +258,51 @@ DARAJA_SHORTCODE=""
 DARAJA_PASSKEY=""
 DARAJA_CALLBACK_URL="https://your-domain/api/webhook/daraja"
 
-# Daraja B2C rider payouts (KES; only after delivery confirmation)
-DARAJA_B2C_SHORTCODE=""
-DARAJA_B2C_INITIATOR_NAME=""
-DARAJA_B2C_SECURITY_CREDENTIAL="" # Safaricom-encrypted initiator password
-DARAJA_B2C_CALLBACK_TOKEN="" # high-entropy secret; never expose to the mobile app
-DARAJA_B2C_RESULT_URL="https://your-domain/api/webhook/daraja/b2c/result?token=<same-secret>"
-DARAJA_B2C_TIMEOUT_URL="https://your-domain/api/webhook/daraja/b2c/timeout?token=<same-secret>"
-# DARAJA_B2C_COMMAND_ID="BusinessPayment" # use only a Safaricom-enabled command
+# Daraja B2C payouts are not used. Zuria never submits B2C payout requests.
 
 # M-Pesa bulk payout ledger
 # /api/admin/payouts/run is a Vercel Cron endpoint (daily at 02:00 UTC).
+# An authorized payout admin uses /safaricom-payouts to download one VCF per set.
 # Eligible manual rider shares are batched daily; shops are batched on Mondays (UTC).
-# Riders configured for automatic M-Pesa payouts are excluded from these batches.
+# KES/M-Pesa rider delivery earnings use these manual batches after the refund
+# window and payout-detail cooldown; no B2C payout request is sent.
 # The endpoint is guarded by Authorization: Bearer $CRON_SECRET.
 # KES payouts use a conservative cooldown based on the recipient record's
 # updatedAt timestamp; unrelated account edits may extend this cooldown.
-# Phone and cooldown are checked again at batching and CSV export. Shares are
-# rounded to whole KES. A changed phone puts the affected payout into manual review.
+# Phone and cooldown are checked again at batching and VCF export. Shares
+# are rounded to whole KES. A changed phone blocks export for manual review.
 # Batches above PAYOUT_AUTO_APPROVAL_LIMIT_KES require a different allow-listed
-# Clerk user to approve them. CSV columns above are a draft, not Safaricom's
-# confirmed upload format. CSV export stays disabled unless PAYOUTS_ENABLED=true.
-# Finance must reconcile each payout from Safaricom's portal using the protected
-# admin reconcile endpoint, including receipt and registered name when available;
-# unknown outcomes are never retried automatically. Never upload a batch twice.
+# Clerk user to approve them. The planner makes sets of up to five recipients,
+# numbered per batch, and reserves KES 500,000 per Nairobi day across scheduled
+# sets. Each recipient transfer may not exceed KES 250,000; a recipient's
+# in-app scheduled total is also limited to KES 500,000 per Nairobi day.
+# At VCF export, an admin must explicitly record other money already sent that
+# Nairobi day (0 is valid); all that money plus Zuria's scheduled sets must fit
+# under the daily cap. Export is available only on the set's scheduled Nairobi
+# date and each set can be exported once.
+# Use Safaricom Send to Many on the approved business line, verify imported
+# contact names and amounts, and never rely on the VCF without checking the app.
+# Keep Safaricom receipts and ledger records; mark sent only for the exact set
+# total, then confirm after reviewing the Safaricom result. Delete the
+# ZP-<batch> contacts from the phone after confirmation.
+# More than 40 sets/sends in a Nairobi week triggers an operational warning;
+# discuss the business-line process with Safaricom.
+# Before production, run the two-contact KES 10 import/payment dry run in
+# ../setup/mpesa-manual-payouts.md using an authorized Safaricom business line.
 
 # Delivery quote signing (at least 32 random characters)
 DELIVERY_QUOTE_SECRET=""
 
-# M-Pesa payout ledger / manual bulk CSV
+# M-Pesa payout ledger / manual Safaricom VCF
 CRON_SECRET=""
 PAYOUT_ADMIN_USER_IDS="" # comma-separated Clerk user IDs
-PAYOUTS_ENABLED="false" # must be true to export a CSV or run the mock sender
+PAYOUTS_ENABLED="false" # must be true to export a Safaricom VCF
 PAYOUT_MAX_RECIPIENT_KES="" # positive whole-unit cap; required by the scheduler
 PAYOUT_MAX_DAILY_KES="" # positive whole-unit per-recipient daily cap; required
-# These limits also guard automatic Daraja B2C rider transfers.
+# These caps may be lower than the fixed Safaricom transaction/day limits.
 PAYOUT_AUTO_APPROVAL_LIMIT_KES="0" # zero means no automatic approval
 PAYOUT_PHONE_COOLDOWN_DAYS="7"
 PAYOUT_ANOMALY_ALERT_KES="" # optional alert threshold
-PAYOUTS_MOCK_SENDER_ENABLED="false" # non-production only
-# Draft only; replace labels/mapping after Safaricom supplies its actual template.
-# Allowed fields: payoutId, recipientType, recipientId, phone, amount, currency
-MPESA_BULK_CSV_COLUMNS="Phone:phone,Amount:amount,Reference:payoutId,Remarks:recipientType"
 
 # ============================================
 # EMAILS (Setup later in Phase 6)

@@ -1,5 +1,10 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { planApprovedPayoutSets } from "@/lib/payouts/safaricom-ledger";
+import {
+  SAFARICOM_MAX_RECIPIENT_DAILY_KES,
+  SAFARICOM_MAX_TRANSACTION_KES,
+} from "@/lib/payouts/safaricom";
 
 const REFUND_WINDOW_HOURS = 48;
 const DEFAULT_PHONE_COOLDOWN_DAYS = 7;
@@ -212,6 +217,10 @@ export async function createEligiblePayouts(now = new Date()) {
       jobs: { include: { rider: true } },
       refundRequest: true,
       payoutOrders: { select: { recipientType: true } },
+      disbursements: {
+        where: { provider: "mpesa" },
+        select: { id: true, recipientType: true },
+      },
     },
   });
 
@@ -249,7 +258,7 @@ export async function createEligiblePayouts(now = new Date()) {
       order.riderPayout &&
       order.riderPayout.toNumber() > 0 &&
       order.jobs?.rider &&
-      order.jobs.rider.payoutProvider !== "mpesa"
+      order.jobs.rider.payoutProvider === "mpesa"
     ) {
       shares.push({
         recipientType: "rider",
@@ -261,6 +270,18 @@ export async function createEligiblePayouts(now = new Date()) {
     }
 
     for (const share of shares) {
+      if (
+        order.disbursements.some(
+          (disbursement) => disbursement.recipientType === share.recipientType,
+        )
+      ) {
+        console.warn(
+          "[PAYOUT] Existing M-Pesa disbursement prevents a duplicate manual payout",
+          { orderId: order.id, recipientType: share.recipientType },
+        );
+        skipped++;
+        continue;
+      }
       if (order.payoutOrders.some((link) => link.recipientType === share.recipientType)) {
         skipped++;
         continue;
@@ -322,8 +343,14 @@ export async function buildEligiblePayoutBatches(input: {
   includeShops: boolean;
 }) {
   const now = input.now ?? new Date();
-  const maxRecipient = getPositiveLimit("PAYOUT_MAX_RECIPIENT_KES");
-  const maxDaily = getPositiveLimit("PAYOUT_MAX_DAILY_KES");
+  const maxRecipient = Math.min(
+    getPositiveLimit("PAYOUT_MAX_RECIPIENT_KES"),
+    SAFARICOM_MAX_TRANSACTION_KES,
+  );
+  const maxDaily = Math.min(
+    getPositiveLimit("PAYOUT_MAX_DAILY_KES"),
+    SAFARICOM_MAX_RECIPIENT_DAILY_KES,
+  );
   const autoApprovalLimit = Math.max(
     0,
     Number(process.env.PAYOUT_AUTO_APPROVAL_LIMIT_KES ?? 0),
@@ -331,7 +358,6 @@ export async function buildEligiblePayoutBatches(input: {
   if (!Number.isSafeInteger(autoApprovalLimit)) {
     throw new Error("PAYOUT_AUTO_APPROVAL_LIMIT_KES must be a whole number");
   }
-
   const payouts = await prisma.payout.findMany({
     where: {
       status: "ELIGIBLE",
@@ -410,7 +436,8 @@ export async function buildEligiblePayoutBatches(input: {
   }
 
   if (candidates.length === 0) return { batches: [], excluded: payouts.length };
-  const totalAmount = candidates.reduce(
+  const batchCandidates = candidates;
+  const totalAmount = batchCandidates.reduce(
     (total, payout) => total + payout.amount.toNumber(),
     0,
   );
@@ -427,17 +454,17 @@ export async function buildEligiblePayoutBatches(input: {
     });
     const updated = await transaction.payout.updateMany({
       where: {
-        id: { in: candidates.map((payout) => payout.id) },
+        id: { in: batchCandidates.map((payout) => payout.id) },
         status: "ELIGIBLE",
         batchId: null,
       },
       data: { status: "BATCHED", batchId: created.id },
     });
-    if (updated.count !== candidates.length) {
+    if (updated.count !== batchCandidates.length) {
       throw new Error("Payout batch changed while it was being built; retry the job");
     }
     const links = await transaction.payoutOrder.findMany({
-      where: { payoutId: { in: candidates.map((payout) => payout.id) } },
+      where: { payoutId: { in: batchCandidates.map((payout) => payout.id) } },
       select: { orderId: true, recipientType: true },
     });
     const shopOrderIds = links
@@ -458,9 +485,12 @@ export async function buildEligiblePayoutBatches(input: {
         data: { riderPayoutStatus: "batched" },
       });
     }
+    if (autoApproved) {
+      await planApprovedPayoutSets(transaction, created.id, now);
+    }
     return created;
   });
-  return { batches: [batch], excluded: payouts.length - candidates.length };
+  return { batches: [batch], excluded: payouts.length - batchCandidates.length };
 }
 
 async function updateLinkedOrderStatus(payoutId: string, status: string) {
