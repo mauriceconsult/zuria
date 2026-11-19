@@ -257,6 +257,8 @@ DARAJA_CONSUMER_SECRET=""
 DARAJA_SHORTCODE=""
 DARAJA_PASSKEY=""
 DARAJA_CALLBACK_URL="https://your-domain/api/webhook/daraja"
+# Optional STK Push transaction type; defaults to CustomerPayBillOnline.
+# DARAJA_TRANSACTION_TYPE="CustomerPayBillOnline"
 
 # Daraja B2C payouts are not used. Zuria never submits B2C payout requests.
 
